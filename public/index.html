@@ -1,0 +1,905 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>CloudCost.io — AI-Powered AWS Cost Estimator</title>
+<meta name="description" content="Estimate your AWS infrastructure costs in seconds using AI. Get detailed breakdowns, INR pricing, and optimization tips for 50+ AWS services."/>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>☁</text></svg>"/>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet"/>
+<style>
+  :root {
+    --bg: #0a0c10;
+    --surface: #111318;
+    --surface2: #181c24;
+    --border: #1f2533;
+    --orange: #ff6b2b;
+    --orange2: #ff9a5c;
+    --yellow: #ffd166;
+    --text: #e8eaf0;
+    --muted: #6b7280;
+    --green: #22d3a0;
+    --red: #ff4d6d;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Syne', sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* GRID BACKGROUND */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(255,107,43,0.04) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,107,43,0.04) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* NAV */
+  nav {
+    position: sticky; top: 0; z-index: 100;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 1rem 2rem;
+    background: rgba(10,12,16,0.85);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border);
+  }
+  .logo {
+    font-family: 'Space Mono', monospace;
+    font-size: 1.1rem; font-weight: 700;
+    color: var(--orange);
+    letter-spacing: -0.5px;
+    cursor: pointer;
+    text-decoration: none;
+  }
+  .logo span { color: var(--text); }
+  .nav-links { display: flex; gap: 1.5rem; align-items: center; }
+  .nav-links a {
+    color: var(--muted); text-decoration: none;
+    font-size: 0.85rem; font-weight: 600;
+    letter-spacing: 0.05em; text-transform: uppercase;
+    transition: color 0.2s;
+  }
+  .nav-links a:hover { color: var(--text); }
+  
+  .auth-btn-group { display: flex; gap: 0.8rem; align-items: center; }
+  .nav-cta {
+    background: var(--surface2); color: var(--text) !important;
+    padding: 0.45rem 1rem; border-radius: 6px;
+    border: 1px solid var(--border);
+    transition: all 0.2s;
+  }
+  .nav-primary {
+    background: var(--orange); color: #000 !important;
+    padding: 0.45rem 1rem; border-radius: 6px; border: none; font-weight: 700 !important;
+    transition: all 0.2s;
+  }
+  .nav-cta:hover { border-color: var(--orange); color: var(--orange) !important; }
+  .nav-primary:hover { background: var(--orange2) !important; transform: translateY(-1px); }
+
+  #userAvatar {
+    display: none;
+    align-items: center; justify-content: center;
+    width: 32px; height: 32px; border-radius: 50%;
+    background: rgba(255,107,43,0.15); border: 1px solid var(--orange);
+    color: var(--orange); font-weight: 800; font-size: 0.8rem;
+    text-transform: uppercase; cursor: pointer;
+  }
+
+  /* MOBILE NAV */
+  .hamburger {
+    display: none; flex-direction: column; gap: 5px; cursor: pointer; background: none; border: none; padding: 4px; z-index: 101;
+  }
+  .hamburger span { width: 22px; height: 2px; background: var(--text); border-radius: 2px; transition: all 0.3s; }
+  .hamburger.open span:nth-child(1) { transform: rotate(45deg) translate(5px, 5px); }
+  .hamburger.open span:nth-child(2) { opacity: 0; }
+  .hamburger.open span:nth-child(3) { transform: rotate(-45deg) translate(5px, -5px); }
+  @media(max-width: 640px) {
+    .hamburger { display: flex; }
+    .nav-links { display: none; position: fixed; inset: 0; background: rgba(10,12,16,0.97); flex-direction: column; align-items: center; justify-content: center; gap: 2rem; z-index: 100; }
+    .nav-links.open { display: flex; }
+    .auth-btn-group { flex-direction: column; width: 200px; text-align: center; }
+    .auth-btn-group a { width: 100%; display: block; margin-top: 0.5rem; }
+  }
+
+  /* HERO */
+  .hero { position: relative; z-index: 1; padding: 5rem 2rem 3rem; max-width: 900px; margin: 0 auto; text-align: center; }
+  .hero-badge { display: inline-flex; align-items: center; gap: 0.4rem; background: rgba(255,107,43,0.12); border: 1px solid rgba(255,107,43,0.3); color: var(--orange2); font-family: 'Space Mono', monospace; font-size: 0.75rem; padding: 0.35rem 0.9rem; border-radius: 999px; margin-bottom: 1.5rem; animation: fadeUp 0.5s ease both; }
+  .hero h1 { font-size: clamp(2.4rem, 6vw, 4rem); font-weight: 800; line-height: 1.05; letter-spacing: -0.03em; animation: fadeUp 0.6s ease 0.1s both; }
+  .hero h1 em { font-style: normal; background: linear-gradient(90deg, var(--orange), var(--yellow)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+  .hero-sub { margin-top: 1.2rem; color: var(--muted); font-size: 1.05rem; line-height: 1.7; max-width: 580px; margin-inline: auto; animation: fadeUp 0.6s ease 0.2s both; }
+  .hero-stats { display: flex; justify-content: center; gap: 2.5rem; margin-top: 2.5rem; animation: fadeUp 0.6s ease 0.3s both; }
+  .stat { text-align: center; }
+  .stat-num { font-family: 'Space Mono', monospace; font-size: 1.5rem; font-weight: 700; color: var(--orange); }
+  .stat-label { font-size: 0.75rem; color: var(--muted); margin-top: 0.2rem; text-transform: uppercase; letter-spacing: 0.05em; }
+
+  /* MAIN TOOL */
+  .tool-section { position: relative; z-index: 1; max-width: 960px; margin: 2rem auto 4rem; padding: 0 1.5rem; animation: fadeUp 0.7s ease 0.4s both; }
+  .tool-card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; overflow: hidden; }
+  .tool-header { padding: 1.2rem 1.5rem; background: var(--surface2); border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem; }
+  .tool-title { font-family: 'Space Mono', monospace; font-size: 0.8rem; color: var(--orange); text-transform: uppercase; letter-spacing: 0.1em; }
+  .credits-badge { display: flex; align-items: center; gap: 0.5rem; background: rgba(255,209,102,0.1); border: 1px solid rgba(255,209,102,0.25); padding: 0.3rem 0.8rem; border-radius: 999px; font-family: 'Space Mono', monospace; font-size: 0.75rem; color: var(--yellow); transition: all 0.3s; }
+  .demo-badge { display: inline-flex; align-items: center; gap: 0.4rem; background: rgba(34,211,160,0.1); border: 1px solid rgba(34,211,160,0.25); padding: 0.2rem 0.6rem; border-radius: 999px; font-family: 'Space Mono', monospace; font-size: 0.65rem; color: var(--green); }
+  .tool-body { padding: 1.5rem; }
+
+  /* STEPS, CHIPS, INPUTS */
+  .steps { display: flex; gap: 0.5rem; margin-bottom: 1.5rem; }
+  .step-pill { flex: 1; padding: 0.5rem; border-radius: 8px; text-align: center; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; border: 1px solid var(--border); color: var(--muted); background: transparent; transition: all 0.3s; cursor: pointer; }
+  .step-pill.active { background: rgba(255,107,43,0.12); border-color: var(--orange); color: var(--orange); }
+  .step-pill.done { background: rgba(34,211,160,0.08); border-color: var(--green); color: var(--green); }
+  .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+  @media(max-width: 600px) { .form-grid { grid-template-columns: 1fr; } }
+  .form-group { display: flex; flex-direction: column; gap: 0.4rem; }
+  .form-group.full { grid-column: 1 / -1; }
+  label { font-size: 0.78rem; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+  input, select, textarea { background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-family: 'Space Mono', monospace; font-size: 0.85rem; padding: 0.7rem 1rem; outline: none; transition: border-color 0.2s; width: 100%; }
+  input:focus, select:focus, textarea:focus { border-color: var(--orange); }
+  select option { background: var(--surface2); }
+  textarea { resize: vertical; min-height: 90px; }
+  .service-chips { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.5rem; }
+  .chip { padding: 0.4rem 0.85rem; border-radius: 999px; font-size: 0.75rem; font-weight: 700; border: 1px solid var(--border); color: var(--muted); cursor: pointer; transition: all 0.2s; user-select: none; }
+  .chip:hover { border-color: var(--orange); color: var(--orange); }
+  .chip.selected { background: rgba(255,107,43,0.15); border-color: var(--orange); color: var(--orange2); }
+  .btn-row { display: flex; gap: 0.8rem; margin-top: 1.5rem; }
+  .estimate-btn { flex: 1; padding: 0.9rem; background: var(--orange); color: #000; border: none; border-radius: 10px; font-family: 'Syne', sans-serif; font-size: 1rem; font-weight: 800; cursor: pointer; transition: all 0.2s; letter-spacing: 0.02em; position: relative; overflow: hidden; }
+  .estimate-btn:hover { background: var(--orange2); transform: translateY(-1px); }
+  .estimate-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+  .estimate-btn .btn-spinner { display: none; width: 16px; height: 16px; border: 2px solid rgba(0,0,0,0.3); border-top-color: #000; border-radius: 50%; animation: spin 0.7s linear infinite; margin-right: 8px; vertical-align: middle; }
+  .estimate-btn.loading .btn-spinner { display: inline-block; }
+  .estimate-btn.loading .btn-text { opacity: 0.6; }
+  .back-btn { padding: 0.9rem 1.5rem; background: transparent; color: var(--muted); border: 1px solid var(--border); border-radius: 10px; font-family: 'Syne', sans-serif; font-size: 0.9rem; font-weight: 700; cursor: pointer; transition: all 0.2s; }
+  .back-btn:hover { border-color: var(--orange); color: var(--orange); }
+
+  /* RESULT */
+  .result-panel { display: none; margin-top: 1.5rem; background: var(--surface2); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; animation: fadeUp 0.4s ease both; }
+  .result-panel.visible { display: block; }
+  .result-header { padding: 1rem 1.5rem; background: rgba(34,211,160,0.06); border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem; }
+  .result-title { font-family: 'Space Mono', monospace; font-size: 0.75rem; color: var(--green); text-transform: uppercase; letter-spacing: 0.1em; }
+  .result-body { padding: 1.5rem; }
+  .cost-summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin-bottom: 1.5rem; }
+  @media(max-width: 600px) { .cost-summary { grid-template-columns: 1fr 1fr; } }
+  .cost-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 1rem; text-align: center; transition: border-color 0.3s; }
+  .cost-card:hover { border-color: rgba(255,107,43,0.3); }
+  .cost-card-label { font-size: 0.7rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+  .cost-card-value { font-family: 'Space Mono', monospace; font-size: 1.3rem; font-weight: 700; margin-top: 0.3rem; color: var(--yellow); }
+  .cost-card-value.usd { color: var(--orange); }
+  .ai-response { font-size: 0.88rem; line-height: 1.8; color: var(--text); white-space: pre-wrap; }
+  .breakdown-table { width: 100%; border-collapse: collapse; margin-top: 1.2rem; font-family: 'Space Mono', monospace; font-size: 0.78rem; }
+  .breakdown-table th { text-align: left; padding: 0.6rem 0.8rem; color: var(--muted); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.06em; border-bottom: 1px solid var(--border); }
+  .breakdown-table td { padding: 0.7rem 0.8rem; border-bottom: 1px solid rgba(31,37,51,0.6); color: var(--text); }
+  .breakdown-table tr:hover td { background: rgba(255,107,43,0.04); }
+  .cost-val { color: var(--orange2); font-weight: 700; }
+
+  /* HOW IT WORKS */
+  .how-section { position: relative; z-index: 1; max-width: 900px; margin: 0 auto 5rem; padding: 0 1.5rem; }
+  .section-label { font-family: 'Space Mono', monospace; font-size: 0.75rem; color: var(--orange); text-transform: uppercase; letter-spacing: 0.12em; margin-bottom: 0.8rem; }
+  .section-title { font-size: 1.9rem; font-weight: 800; letter-spacing: -0.02em; margin-bottom: 2.5rem; }
+  .how-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; }
+  @media(max-width: 700px) { .how-grid { grid-template-columns: 1fr 1fr; } }
+  .how-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 1.2rem; transition: border-color 0.3s, transform 0.3s; }
+  .how-card:hover { border-color: rgba(255,107,43,0.3); transform: translateY(-2px); }
+  .how-num { font-family: 'Space Mono', monospace; font-size: 1.5rem; font-weight: 700; color: rgba(255,107,43,0.25); margin-bottom: 0.8rem; }
+  .how-title { font-size: 0.9rem; font-weight: 700; margin-bottom: 0.4rem; }
+  .how-desc { font-size: 0.78rem; color: var(--muted); line-height: 1.6; }
+
+  /* PRICING */
+  .pricing-section { position: relative; z-index: 1; max-width: 900px; margin: 0 auto 5rem; padding: 0 1.5rem; }
+  .pricing-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; }
+  @media(max-width: 700px) { .pricing-grid { grid-template-columns: 1fr; } }
+  .price-card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 1.5rem; transition: border-color 0.3s, transform 0.3s; }
+  .price-card:hover { border-color: rgba(255,107,43,0.4); transform: translateY(-2px); }
+  .price-card.featured { border-color: var(--orange); background: linear-gradient(145deg, rgba(255,107,43,0.07), var(--surface)); position: relative; }
+  .popular-tag { position: absolute; top: -12px; left: 50%; transform: translateX(-50%); background: var(--orange); color: #000; font-size: 0.65rem; font-weight: 800; padding: 0.25rem 0.8rem; border-radius: 999px; text-transform: uppercase; letter-spacing: 0.1em; white-space: nowrap; }
+  .price-name { font-size: 0.8rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+  .price-val { font-family: 'Space Mono', monospace; font-size: 2rem; font-weight: 700; color: var(--text); margin: 0.8rem 0 0.2rem; }
+  .price-val span { font-size: 0.9rem; color: var(--muted); }
+  .price-desc { font-size: 0.82rem; color: var(--muted); margin-bottom: 1.2rem; }
+  .price-features { list-style: none; display: flex; flex-direction: column; gap: 0.6rem; }
+  .price-features li { font-size: 0.82rem; color: var(--muted); display: flex; align-items: flex-start; gap: 0.5rem; }
+  .price-features li::before { content: '→'; color: var(--orange); flex-shrink: 0; }
+  .price-features li.green::before { color: var(--green); content: '✓'; }
+  .buy-btn { width: 100%; margin-top: 1.5rem; padding: 0.7rem; border-radius: 8px; border: 1px solid var(--border); background: transparent; color: var(--text); font-family: 'Syne', sans-serif; font-size: 0.88rem; font-weight: 700; cursor: pointer; transition: all 0.2s; }
+  .buy-btn:hover { border-color: var(--orange); color: var(--orange); }
+  .buy-btn.primary { background: var(--orange); border-color: var(--orange); color: #000; }
+  .buy-btn.primary:hover { background: var(--orange2); border-color: var(--orange2); }
+
+  /* FOOTER */
+  footer { position: relative; z-index: 1; border-top: 1px solid var(--border); padding: 2rem; text-align: center; font-family: 'Space Mono', monospace; font-size: 0.75rem; color: var(--muted); }
+  footer a { color: var(--orange); text-decoration: none; }
+  footer a:hover { text-decoration: underline; }
+
+  /* MODALS */
+  .modal-overlay { display: none; position: fixed; inset: 0; z-index: 200; background: rgba(0,0,0,0.7); backdrop-filter: blur(8px); align-items: center; justify-content: center; }
+  .modal-overlay.open { display: flex; }
+  .modal { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 2.5rem; max-width: 420px; width: 90%; position: relative; animation: fadeUp 0.3s ease both; }
+  .modal h3 { font-size: 1.3rem; font-weight: 800; margin-bottom: 0.5rem; }
+  .modal p { font-size: 0.85rem; color: var(--muted); margin-bottom: 1.5rem; line-height: 1.6; }
+  .modal-close { position: absolute; top: 1rem; right: 1rem; background: none; border: none; color: var(--muted); font-size: 1.2rem; cursor: pointer; transition: color 0.2s; padding: 0.5rem; }
+  .modal-close:hover { color: var(--text); }
+  .modal-price-tag { display: flex; align-items: baseline; gap: 0.5rem; margin-bottom: 1.2rem; }
+  .modal-price-tag .price { font-family: 'Space Mono', monospace; font-size: 1.8rem; font-weight: 700; color: var(--orange); }
+  .modal-price-tag .period { font-size: 0.8rem; color: var(--muted); }
+  .razorpay-note { background: rgba(34,211,160,0.07); border: 1px solid rgba(34,211,160,0.2); border-radius: 8px; padding: 0.8rem; font-size: 0.8rem; color: var(--green); margin-top: 1rem; text-align: center; }
+
+  /* AUTH MODAL TABS */
+  .auth-tabs { display: flex; border-bottom: 1px solid var(--border); margin-bottom: 1.5rem; }
+  .auth-tab { flex: 1; padding: 0.8rem; text-align: center; font-size: 0.85rem; font-weight: 700; color: var(--muted); cursor: pointer; border-bottom: 2px solid transparent; }
+  .auth-tab.active { color: var(--orange); border-bottom-color: var(--orange); }
+  .auth-form { display: none; flex-direction: column; gap: 1rem; }
+  .auth-form.active { display: flex; }
+
+  /* ANIMATIONS */
+  @keyframes fadeUp { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: translateY(0); } }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* TOAST */
+  .toast { position: fixed; bottom: 2rem; right: 2rem; z-index: 300; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 0.9rem 1.3rem; font-size: 0.85rem; transform: translateY(80px); opacity: 0; transition: all 0.35s ease; max-width: 300px; }
+  .toast.show { transform: translateY(0); opacity: 1; }
+  .toast.success { border-color: var(--green); color: var(--green); }
+  .toast.error { border-color: var(--red); color: var(--red); }
+
+  /* Scroll-triggered animations */
+  .reveal { opacity: 0; transform: translateY(24px); transition: opacity 0.6s ease, transform 0.6s ease; }
+  .reveal.visible { opacity: 1; transform: translateY(0); }
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <a class="logo" href="#" onclick="scrollToTop(event)">Cloud<span>Cost</span>.io</a>
+  <button class="hamburger" id="hamburger" onclick="toggleMobileNav()" aria-label="Toggle navigation">
+    <span></span><span></span><span></span>
+  </button>
+  <div class="nav-links" id="navLinks">
+    <a href="#how" onclick="closeMobileNav()">How it works</a>
+    <a href="#pricing" onclick="closeMobileNav()">Pricing</a>
+    
+    <!-- Auth Group changes based on login state -->
+    <div class="auth-btn-group" id="loggedOutNav">
+      <a href="#" class="nav-cta" onclick="openAuthModal('login'); return false;">Log In</a>
+      <a href="#" class="nav-primary" onclick="openAuthModal('register'); return false;">Sign Up Free</a>
+    </div>
+
+    <div class="auth-btn-group" id="loggedInNav" style="display:none;">
+      <a href="#tool" class="nav-cta" onclick="closeMobileNav()">New Estimate →</a>
+      <div id="userAvatar" onclick="logout()" title="Click to logout">U</div>
+    </div>
+  </div>
+</nav>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="hero-badge">⚡ AI-Powered · Instant · Accurate</div>
+  <h1>AWS Cost Estimates<br/><em>in 10 Seconds Flat</em></h1>
+  <p class="hero-sub">Describe your infrastructure in plain English. Our AI analyzes your stack and generates a detailed AWS cost breakdown — no spreadsheets, no guesswork.</p>
+  <div class="hero-stats">
+    <div class="stat"><div class="stat-num">10s</div><div class="stat-label">Avg estimate time</div></div>
+    <div class="stat"><div class="stat-num">50+</div><div class="stat-label">AWS services covered</div></div>
+    <div class="stat"><div class="stat-num">₹49</div><div class="stat-label">Per estimate</div></div>
+  </div>
+</section>
+
+<!-- TOOL -->
+<section class="tool-section" id="tool">
+  <div class="tool-card">
+    <div class="tool-header">
+      <span class="tool-title">⚙ AWS Cost Estimator</span>
+      <span class="credits-badge" id="creditsDisplay">🪙 Checking credits...</span>
+    </div>
+    <div class="tool-body">
+
+      <!-- STEPS -->
+      <div class="steps">
+        <div class="step-pill active" id="step1pill" onclick="navigateStep(1)">1. Describe</div>
+        <div class="step-pill" id="step2pill" onclick="navigateStep(2)">2. Configure</div>
+        <div class="step-pill" id="step3pill">3. Estimate</div>
+      </div>
+
+      <!-- STEP 1: Services -->
+      <div id="step1">
+        <div class="form-group" style="margin-bottom:1rem;">
+          <label>Select AWS Services (click all that apply)</label>
+          <div class="service-chips" id="serviceChips">
+            <div class="chip" data-service="EC2">EC2</div>
+            <div class="chip" data-service="RDS">RDS</div>
+            <div class="chip" data-service="S3">S3</div>
+            <div class="chip" data-service="Lambda">Lambda</div>
+            <div class="chip" data-service="CloudFront">CloudFront</div>
+            <div class="chip" data-service="EKS">EKS</div>
+            <div class="chip" data-service="ECS">ECS</div>
+            <div class="chip" data-service="ElastiCache">ElastiCache</div>
+            <div class="chip" data-service="SQS">SQS</div>
+            <div class="chip" data-service="SNS">SNS</div>
+            <div class="chip" data-service="API Gateway">API Gateway</div>
+            <div class="chip" data-service="DynamoDB">DynamoDB</div>
+            <div class="chip" data-service="Elasticsearch">OpenSearch</div>
+            <div class="chip" data-service="NAT Gateway">NAT Gateway</div>
+            <div class="chip" data-service="Route 53">Route 53</div>
+          </div>
+        </div>
+        <div class="form-group" style="margin-bottom:1rem;">
+          <label>Describe your use case</label>
+          <textarea id="usecase" placeholder="e.g. A SaaS app with 10k monthly users. We need 2 EC2 t3.medium instances behind a load balancer, a PostgreSQL RDS db.t3.small, S3 for file storage (~50GB), and CloudFront for static assets."></textarea>
+        </div>
+        <button class="estimate-btn" onclick="goToStep2()">Next: Configure Details →</button>
+      </div>
+
+      <!-- STEP 2: Config -->
+      <div id="step2" style="display:none;">
+        <div class="form-grid">
+          <div class="form-group">
+            <label>AWS Region</label>
+            <select id="region">
+              <option>us-east-1 (N. Virginia)</option>
+              <option>us-west-2 (Oregon)</option>
+              <option>ap-south-1 (Mumbai)</option>
+              <option>ap-southeast-1 (Singapore)</option>
+              <option>eu-west-1 (Ireland)</option>
+              <option>ap-northeast-1 (Tokyo)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Expected Monthly Traffic</label>
+            <select id="traffic">
+              <option>Low (< 10k req/day)</option>
+              <option>Medium (10k–100k req/day)</option>
+              <option>High (100k–1M req/day)</option>
+              <option>Very High (> 1M req/day)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Pricing Model</label>
+            <select id="pricingModel">
+              <option>On-Demand (no commitment)</option>
+              <option>1-Year Reserved Instances</option>
+              <option>3-Year Reserved Instances</option>
+              <option>Spot Instances (variable)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Environment</label>
+            <select id="environment">
+              <option>Production</option>
+              <option>Staging</option>
+              <option>Development</option>
+            </select>
+          </div>
+          <div class="form-group full">
+            <label>Additional requirements (optional)</label>
+            <textarea id="additionalReqs" placeholder="e.g. Multi-AZ for high availability, automated backups, SSL certificates, monitoring with CloudWatch..." style="min-height:70px;"></textarea>
+          </div>
+        </div>
+        <div class="btn-row">
+          <button class="back-btn" onclick="goToStep1()">← Back</button>
+          <button class="estimate-btn" id="estimateBtn" onclick="runEstimate()">
+            <span class="btn-spinner"></span>
+            <span class="btn-text">⚡ Generate Cost Estimate</span>
+          </button>
+        </div>
+        <p style="font-size:0.72rem;color:var(--muted);text-align:center;margin-top:0.6rem;">
+          Uses 1 credit · <a href="#pricing" style="color:var(--orange);">Buy more credits</a>
+        </p>
+      </div>
+
+      <!-- RESULT PANEL -->
+      <div class="result-panel" id="resultPanel">
+        <div class="result-header">
+          <span class="result-title">✓ Estimate Complete</span>
+          <div style="display:flex;gap:0.8rem;align-items:center;">
+            <span id="demoBadge" class="demo-badge" style="display:none;">🧪 Demo Data</span>
+            <span style="font-size:0.75rem;color:var(--muted);font-family:'Space Mono',monospace;" id="resultTimestamp"></span>
+          </div>
+        </div>
+        <div class="result-body">
+          <div class="cost-summary" id="costSummary">
+            <div class="cost-card">
+              <div class="cost-card-label">Monthly (USD)</div>
+              <div class="cost-card-value usd" id="monthlyUSD">—</div>
+            </div>
+            <div class="cost-card">
+              <div class="cost-card-label">Monthly (INR)</div>
+              <div class="cost-card-value" id="monthlyINR">—</div>
+            </div>
+            <div class="cost-card">
+              <div class="cost-card-label">Annual (USD)</div>
+              <div class="cost-card-value" id="annualUSD">—</div>
+            </div>
+          </div>
+          <div class="ai-response" id="aiResponse"></div>
+          <div id="breakdownTableWrap"></div>
+          <div style="display:flex;gap:0.8rem;margin-top:1.5rem;flex-wrap:wrap;">
+            <button class="buy-btn primary" onclick="openPaymentModal('report')" style="flex:1;min-width:160px;">📄 Download PDF Report</button>
+            <button class="buy-btn" onclick="newEstimate()" style="flex:1;min-width:140px;">+ New Estimate</button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- HOW IT WORKS -->
+<section class="how-section reveal" id="how">
+  <div class="section-label">// Process</div>
+  <div class="section-title">How it works</div>
+  <div class="how-grid">
+    <div class="how-card"><div class="how-num">01</div><div class="how-title">Describe your stack</div><div class="how-desc">Select services and describe your architecture in plain English.</div></div>
+    <div class="how-card"><div class="how-num">02</div><div class="how-title">Configure details</div><div class="how-desc">Set region, traffic, pricing model and environment preferences.</div></div>
+    <div class="how-card"><div class="how-num">03</div><div class="how-title">AI analyzes</div><div class="how-desc">Our AI cross-references live AWS pricing data and your requirements.</div></div>
+    <div class="how-card"><div class="how-num">04</div><div class="how-title">Get breakdown</div><div class="how-desc">Receive a detailed cost breakdown with optimization suggestions.</div></div>
+  </div>
+</section>
+
+<!-- PRICING -->
+<section class="pricing-section reveal" id="pricing">
+  <div class="section-label">// Pricing</div>
+  <div class="section-title">Simple, pay-per-use</div>
+  <div class="pricing-grid">
+    <div class="price-card">
+      <div class="price-name">Starter</div>
+      <div class="price-val">₹149 <span>/ 5 credits</span></div>
+      <div class="price-desc">Perfect for a quick project estimate</div>
+      <ul class="price-features">
+        <li>5 cost estimates</li>
+        <li>All AWS services</li>
+        <li>USD + INR breakdown</li>
+        <li>Valid 30 days</li>
+      </ul>
+      <button class="buy-btn" onclick="openPaymentModal('starter')">Buy Starter Pack</button>
+    </div>
+    <div class="price-card featured">
+      <div class="popular-tag">Most Popular</div>
+      <div class="price-name">Pro</div>
+      <div class="price-val">₹499 <span>/ 20 credits</span></div>
+      <div class="price-desc">For teams planning infra regularly</div>
+      <ul class="price-features">
+        <li class="green">20 cost estimates</li>
+        <li class="green">PDF report download</li>
+        <li class="green">Cost optimization tips</li>
+        <li class="green">Priority AI response</li>
+        <li class="green">Valid 90 days</li>
+      </ul>
+      <button class="buy-btn primary" onclick="openPaymentModal('pro')">Buy Pro Pack</button>
+    </div>
+    <div class="price-card">
+      <div class="price-name">Team</div>
+      <div class="price-val">₹1,499 <span>/ 100 credits</span></div>
+      <div class="price-desc">For agencies & DevOps teams</div>
+      <ul class="price-features">
+        <li>100 cost estimates</li>
+        <li>Shareable reports</li>
+        <li>Multi-region compare</li>
+        <li>Reserved vs On-Demand compare</li>
+        <li>Valid 180 days</li>
+      </ul>
+      <button class="buy-btn" onclick="openPaymentModal('team')">Buy Team Pack</button>
+    </div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <p>CloudCost.io — AI-Powered AWS Cost Estimator</p>
+  <p style="margin-top:0.5rem;"><a href="#">Privacy Policy</a> · <a href="#">Terms</a> · <a href="mailto:hello@cloudcost.io">Contact</a></p>
+</footer>
+
+<!-- PAYMENT MODAL -->
+<div class="modal-overlay" id="paymentModal">
+  <div class="modal">
+    <button class="modal-close" onclick="closeModal('paymentModal')">✕</button>
+    <h3 id="paymentTitle">Complete Purchase</h3>
+    <p id="paymentDesc">You're about to purchase the Pro Pack — 20 credits for ₹499.</p>
+    <div class="modal-price-tag">
+      <span class="price" id="paymentPrice">₹499</span>
+      <span class="period" id="paymentPeriod">one-time</span>
+    </div>
+    <button class="buy-btn primary" id="modalPayBtn" onclick="simulatePurchase()" style="margin-top:0;">Pay with Razorpay →</button>
+    <div class="razorpay-note">🔒 Secure payment via Razorpay · UPI / Cards / NetBanking</div>
+  </div>
+</div>
+
+<!-- AUTH MODAL -->
+<div class="modal-overlay" id="authModal">
+  <div class="modal" style="max-width:380px;">
+    <button class="modal-close" onclick="closeModal('authModal')">✕</button>
+    
+    <div class="auth-tabs">
+      <div class="auth-tab active" id="tabRegister" onclick="switchAuthTab('register')">Sign Up (Get 3 Credits)</div>
+      <div class="auth-tab" id="tabLogin" onclick="switchAuthTab('login')">Log In</div>
+    </div>
+
+    <!-- REGISTER FORM -->
+    <div class="auth-form active" id="formRegister">
+      <div class="form-group">
+        <label>Email</label>
+        <input type="email" id="regEmail" placeholder="you@company.com" />
+      </div>
+      <div class="form-group">
+        <label>Password</label>
+        <input type="password" id="regPass" placeholder="••••••••" />
+      </div>
+      <button class="buy-btn primary" id="btnRegister" onclick="handleAuth('register')">Create Free Account</button>
+    </div>
+
+    <!-- LOGIN FORM -->
+    <div class="auth-form" id="formLogin">
+      <div class="form-group">
+        <label>Email</label>
+        <input type="email" id="logEmail" placeholder="you@company.com" />
+      </div>
+      <div class="form-group">
+        <label>Password</label>
+        <input type="password" id="logPass" placeholder="••••••••" />
+      </div>
+      <button class="buy-btn primary" id="btnLogin" onclick="handleAuth('login')">Log In</button>
+    </div>
+
+  </div>
+</div>
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ── GLOBALS ──────────────────────────────────────────
+let selectedServices = [];
+let currentPlan = '';
+let currentStep = 1;
+let userCredits = 0; // Fetched from server
+
+// ── INIT & AUTH STATE ──────────────────────────────
+async function init() {
+  const token = localStorage.getItem('cloudcost_token');
+  if (token) {
+    // Verify token and fetch credits
+    try {
+      const res = await fetch('/api/user/me', { headers: { 'Authorization': `Bearer ${token}` } });
+      if (res.ok) {
+        const data = await res.json();
+        setLoggedInState(data.user);
+      } else {
+        logout(false);
+      }
+    } catch {
+      logout(false);
+    }
+  } else {
+    // Completely unauthenticated
+    document.getElementById('creditsDisplay').textContent = '🪙 Log in to get 3 free credits!';
+  }
+}
+init();
+
+function setLoggedInState(user) {
+  userCredits = user.free_credits;
+  document.getElementById('loggedOutNav').style.display = 'none';
+  document.getElementById('loggedInNav').style.display = 'flex';
+  
+  const avatar = document.getElementById('userAvatar');
+  avatar.style.display = 'flex';
+  avatar.textContent = user.email.charAt(0).toUpperCase();
+
+  updateCreditsDisplay();
+}
+
+function logout(showMsgs = true) {
+  localStorage.removeItem('cloudcost_token');
+  userCredits = 0;
+  document.getElementById('loggedOutNav').style.display = 'flex';
+  document.getElementById('loggedInNav').style.display = 'none';
+  document.getElementById('userAvatar').style.display = 'none';
+  document.getElementById('creditsDisplay').textContent = '🪙 Log in to get 3 free credits!';
+  if (showMsgs) showToast('Logged out successfully', 'success');
+}
+
+function updateCreditsDisplay() {
+  const el = document.getElementById('creditsDisplay');
+  if (userCredits <= 0) {
+    el.textContent = '🪙 0 credits — Buy more';
+    el.style.color = 'var(--red)';
+    el.style.borderColor = 'rgba(255,77,109,0.3)';
+    el.style.background = 'rgba(255,77,109,0.08)';
+    el.style.cursor = 'pointer';
+    el.onclick = () => openPaymentModal('pro');
+  } else {
+    el.textContent = `🪙 ${userCredits} free credit${userCredits !== 1 ? 's' : ''} remaining`;
+    el.style.color = 'var(--yellow)';
+    el.style.borderColor = 'rgba(255,209,102,0.25)';
+    el.style.background = 'rgba(255,209,102,0.1)';
+    el.onclick = null;
+    el.style.cursor = 'default';
+  }
+}
+
+// ── MODALS & TABS ──────────────────────────────────
+function openAuthModal(mode) {
+  document.getElementById('authModal').classList.add('open');
+  switchAuthTab(mode);
+}
+
+function switchAuthTab(mode) {
+  if (mode === 'register') {
+    document.getElementById('tabRegister').classList.add('active');
+    document.getElementById('tabLogin').classList.remove('active');
+    document.getElementById('formRegister').classList.add('active');
+    document.getElementById('formLogin').classList.remove('active');
+  } else {
+    document.getElementById('tabLogin').classList.add('active');
+    document.getElementById('tabRegister').classList.remove('active');
+    document.getElementById('formLogin').classList.add('active');
+    document.getElementById('formRegister').classList.remove('active');
+  }
+}
+
+async function handleAuth(mode) {
+  const email = document.getElementById(mode === 'register' ? 'regEmail' : 'logEmail').value;
+  const password = document.getElementById(mode === 'register' ? 'regPass' : 'logPass').value;
+  const btn = document.getElementById(mode === 'register' ? 'btnRegister' : 'btnLogin');
+
+  if (!email || !password) return showToast('Please enter email and password', 'error');
+
+  btn.textContent = 'Processing...';
+  btn.disabled = true;
+
+  try {
+    const res = await fetch(`/api/auth/${mode}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password })
+    });
+    const data = await res.json();
+
+    if (!res.ok) throw new Error(data.error);
+
+    localStorage.setItem('cloudcost_token', data.token);
+    setLoggedInState(data.user);
+    closeModal('authModal');
+    showToast(data.message, 'success');
+
+  } catch(err) {
+    showToast(err.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = mode === 'register' ? 'Create Free Account' : 'Log In';
+  }
+}
+
+// ── PAYMENT MODAL ──
+const planDetails = {
+  starter: { title: '🚀 Starter Pack', desc: '5 estimates for ₹149. Perfect for quick project scoping.', price: '₹149', period: '5 credits' },
+  pro:     { title: '⚡ Pro Pack',     desc: '20 estimates for ₹499. Includes PDF reports and optimization tips.', price: '₹499', period: '20 credits' },
+  team:    { title: '🏢 Team Pack',    desc: '100 estimates for ₹1,499. For agencies and DevOps teams.', price: '₹1,499', period: '100 credits' },
+  report:  { title: '📄 PDF Report',  desc: 'Download a beautifully formatted PDF report of this estimate.', price: '₹49', period: 'per report' },
+};
+
+function openPaymentModal(plan) {
+  const token = localStorage.getItem('cloudcost_token');
+  if (!token) return openAuthModal('register'); // Force login before pay
+
+  currentPlan = plan;
+  const p = planDetails[plan] || planDetails.pro;
+  document.getElementById('paymentTitle').textContent = p.title;
+  document.getElementById('paymentDesc').textContent = p.desc;
+  document.getElementById('paymentPrice').textContent = p.price;
+  document.getElementById('paymentPeriod').textContent = p.period;
+  document.getElementById('paymentModal').classList.add('open');
+}
+
+function closeModal(id) {
+  document.getElementById(id).classList.remove('open');
+}
+
+// Close modals on overlay click or Esc
+document.querySelectorAll('.modal-overlay').forEach(overlay => {
+  overlay.addEventListener('click', e => { if (e.target === overlay) overlay.classList.remove('open'); });
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') { closeModal('paymentModal'); closeModal('authModal'); }
+});
+
+function simulatePurchase() {
+  const btn = document.getElementById('modalPayBtn');
+  btn.textContent = 'Processing…';
+  btn.disabled = true;
+
+  setTimeout(() => {
+    closeModal('paymentModal');
+    btn.textContent = 'Pay with Razorpay →';
+    btn.disabled = false;
+
+    // TODO: Connect this to REAL Razorpay webhook later
+    // For now we just fake it on the frontend for UX feel
+    showToast(`✓ Razorpay demo complete! Integrate backend webhook for real money.`, 'success');
+  }, 1500);
+}
+
+
+// ── UI HELPERS ────────────────────────────────────
+function toggleMobileNav() {
+  document.getElementById('hamburger').classList.toggle('open');
+  document.getElementById('navLinks').classList.toggle('open');
+}
+function closeMobileNav() {
+  document.getElementById('hamburger').classList.remove('open');
+  document.getElementById('navLinks').classList.remove('open');
+}
+function scrollToTop(e) {
+  e.preventDefault();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+// ── CHIPS ──────────────────────────────────────────
+document.querySelectorAll('.chip').forEach(chip => {
+  chip.addEventListener('click', () => {
+    chip.classList.toggle('selected');
+    const svc = chip.dataset.service;
+    if (chip.classList.contains('selected')) selectedServices.push(svc);
+    else selectedServices = selectedServices.filter(s => s !== svc);
+  });
+});
+
+// ── STEP NAV ───────────────────────────────────────
+function navigateStep(step) {
+  if (step === 1) goToStep1();
+  if (step === 2 && document.getElementById('step1pill').classList.contains('done')) goToStep2();
+}
+
+function goToStep1() {
+  currentStep = 1;
+  document.getElementById('step1').style.display = 'block';
+  document.getElementById('step2').style.display = 'none';
+  document.getElementById('step1pill').className = 'step-pill active';
+  document.getElementById('step2pill').className = 'step-pill';
+  document.getElementById('step3pill').className = 'step-pill';
+  document.getElementById('resultPanel').classList.remove('visible');
+}
+
+function goToStep2() {
+  const usecase = document.getElementById('usecase').value.trim();
+  if (!usecase && selectedServices.length === 0) {
+    showToast('Please describe your use case or select services.', 'error');
+    return;
+  }
+  currentStep = 2;
+  document.getElementById('step1').style.display = 'none';
+  document.getElementById('step2').style.display = 'block';
+  document.getElementById('step1pill').className = 'step-pill done';
+  document.getElementById('step2pill').className = 'step-pill active';
+}
+
+function newEstimate() {
+  goToStep1();
+  document.getElementById('usecase').value = '';
+  document.getElementById('additionalReqs').value = '';
+  selectedServices = [];
+  document.querySelectorAll('.chip').forEach(c => c.classList.remove('selected'));
+  document.getElementById('tool').scrollIntoView({ behavior: 'smooth' });
+}
+
+// ── ESTIMATE ───────────────────────────────────────
+async function runEstimate() {
+  const token = localStorage.getItem('cloudcost_token');
+  if (!token) {
+    openAuthModal('register');
+    return;
+  }
+
+  const btn = document.getElementById('estimateBtn');
+  btn.disabled = true;
+  btn.classList.add('loading');
+  btn.querySelector('.btn-text').textContent = 'Analyzing your stack…';
+
+  document.getElementById('resultPanel').classList.remove('visible');
+  document.getElementById('step2pill').className = 'step-pill done';
+  document.getElementById('step3pill').className = 'step-pill active';
+
+  try {
+    const response = await fetch('/api/estimate', {
+      method: 'POST',
+      headers: { 
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({
+        services: selectedServices.join(', '), 
+        usecase: document.getElementById('usecase').value, 
+        region: document.getElementById('region').value, 
+        traffic: document.getElementById('traffic').value,
+        pricingModel: document.getElementById('pricingModel').value, 
+        environment: document.getElementById('environment').value, 
+        additional: document.getElementById('additionalReqs').value,
+      }),
+    });
+
+    const body = await response.json();
+
+    if (!response.ok) {
+      if (body.out_of_credits) {
+        // Run out of credits -> show payment
+        openPaymentModal('pro');
+        throw new Error("No credits remaining.");
+      }
+      throw new Error(body.error || `Server error (${response.status})`);
+    }
+
+    // Success! Update credits and show UI
+    userCredits = body.remaining_credits;
+    updateCreditsDisplay();
+    renderResult(body);
+
+  } catch (err) {
+    if (err.message !== "No credits remaining.") {
+      showToast('Error: ' + err.message, 'error');
+    }
+    document.getElementById('step3pill').className = 'step-pill';
+    document.getElementById('step2pill').className = 'step-pill active';
+  } finally {
+    btn.disabled = false;
+    btn.classList.remove('loading');
+    btn.querySelector('.btn-text').textContent = '⚡ Generate Cost Estimate';
+  }
+}
+
+function renderResult(r) {
+  const inr = r.monthly_usd * (r.usd_inr_rate || 83.5);
+  document.getElementById('monthlyUSD').textContent = '$' + r.monthly_usd.toFixed(2);
+  document.getElementById('monthlyINR').textContent = '₹' + Math.round(inr).toLocaleString('en-IN');
+  document.getElementById('annualUSD').textContent = '$' + r.annual_usd.toFixed(2);
+  document.getElementById('resultTimestamp').textContent = new Date().toLocaleTimeString();
+
+  const demoBadge = document.getElementById('demoBadge');
+  demoBadge.style.display = r.demo_mode ? 'inline-flex' : 'none';
+
+  let tableHTML = '<table class="breakdown-table"><thead><tr><th>Service</th><th>Monthly (USD)</th><th>Monthly (INR)</th><th>Notes</th></tr></thead><tbody>';
+  (r.breakdown || []).forEach(row => {
+    const rowInr = row.monthly_usd * (r.usd_inr_rate || 83.5);
+    tableHTML += `<tr><td>${row.service}</td><td class="cost-val">$${row.monthly_usd.toFixed(2)}</td><td>₹${Math.round(rowInr).toLocaleString('en-IN')}</td><td style="color:var(--muted)">${row.notes || ''}</td></tr>`;
+  });
+  tableHTML += '</tbody></table>';
+  document.getElementById('breakdownTableWrap').innerHTML = tableHTML;
+
+  let summaryHTML = '';
+  if (r.summary) summaryHTML += `<p style="margin-top:1rem;color:var(--muted);font-size:0.85rem;line-height:1.7;">${r.summary}</p>`;
+  if (r.optimizations && r.optimizations.length > 0) {
+    summaryHTML += `<div style="margin-top:1.2rem;padding:1rem;background:rgba(255,209,102,0.06);border:1px solid rgba(255,209,102,0.15);border-radius:10px;"><div style="font-size:0.72rem;color:var(--yellow);text-transform:uppercase;letter-spacing:0.1em;font-weight:700;margin-bottom:0.7rem;">💡 Cost Optimization Tips</div><ul style="list-style:none;display:flex;flex-direction:column;gap:0.5rem;">${r.optimizations.map(t => `<li style="font-size:0.82rem;color:var(--muted);">→ ${t}</li>`).join('')}</ul></div>`;
+  }
+  if (r.confidence) {
+    const confColors = { low: 'var(--red)', medium: 'var(--yellow)', high: 'var(--green)' };
+    summaryHTML += `<p style="margin-top:0.8rem;font-size:0.75rem;font-family:'Space Mono',monospace;color:${confColors[r.confidence] || 'var(--muted)'};">Confidence: ${r.confidence.toUpperCase()}</p>`;
+  }
+  document.getElementById('aiResponse').innerHTML = summaryHTML;
+
+  document.getElementById('resultPanel').classList.add('visible');
+  document.getElementById('step3pill').className = 'step-pill done';
+  document.getElementById('resultPanel').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  showToast('Estimate complete! 🎉', 'success');
+}
+
+// ── TOAST ──────────────────────────────────────────
+let toastTimer;
+function showToast(msg, type) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast show ' + (type || '');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { t.classList.remove('show'); }, 3500);
+}
+
+// ── SCROLL REVEAL ─────────────────────────────────
+const observer = new IntersectionObserver((entries) => {
+  entries.forEach(entry => { if (entry.isIntersecting) entry.target.classList.add('visible'); });
+}, { threshold: 0.1 });
+document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
+</script>
+</body>
+</html>

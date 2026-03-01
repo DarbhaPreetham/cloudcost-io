@@ -1,0 +1,975 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>CloudCost.io — AI-Powered AWS Cost Estimator</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet"/>
+<style>
+  :root {
+    --bg: #0a0c10;
+    --surface: #111318;
+    --surface2: #181c24;
+    --border: #1f2533;
+    --orange: #ff6b2b;
+    --orange2: #ff9a5c;
+    --yellow: #ffd166;
+    --text: #e8eaf0;
+    --muted: #6b7280;
+    --green: #22d3a0;
+    --red: #ff4d6d;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Syne', sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* GRID BACKGROUND */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(255,107,43,0.04) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,107,43,0.04) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* NAV */
+  nav {
+    position: sticky; top: 0; z-index: 100;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 1rem 2rem;
+    background: rgba(10,12,16,0.85);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border);
+  }
+  .logo {
+    font-family: 'Space Mono', monospace;
+    font-size: 1.1rem; font-weight: 700;
+    color: var(--orange);
+    letter-spacing: -0.5px;
+  }
+  .logo span { color: var(--text); }
+  .nav-links { display: flex; gap: 2rem; align-items: center; }
+  .nav-links a {
+    color: var(--muted); text-decoration: none;
+    font-size: 0.85rem; font-weight: 600;
+    letter-spacing: 0.05em; text-transform: uppercase;
+    transition: color 0.2s;
+  }
+  .nav-links a:hover { color: var(--text); }
+  .nav-cta {
+    background: var(--orange); color: #000 !important;
+    padding: 0.5rem 1.2rem; border-radius: 6px;
+    font-weight: 700 !important;
+  }
+  .nav-cta:hover { background: var(--orange2) !important; color: #000 !important; }
+
+  /* HERO */
+  .hero {
+    position: relative; z-index: 1;
+    padding: 5rem 2rem 3rem;
+    max-width: 900px; margin: 0 auto;
+    text-align: center;
+  }
+  .hero-badge {
+    display: inline-flex; align-items: center; gap: 0.4rem;
+    background: rgba(255,107,43,0.12);
+    border: 1px solid rgba(255,107,43,0.3);
+    color: var(--orange2);
+    font-family: 'Space Mono', monospace;
+    font-size: 0.75rem; padding: 0.35rem 0.9rem;
+    border-radius: 999px; margin-bottom: 1.5rem;
+    animation: fadeUp 0.5s ease both;
+  }
+  .hero h1 {
+    font-size: clamp(2.4rem, 6vw, 4rem);
+    font-weight: 800; line-height: 1.05;
+    letter-spacing: -0.03em;
+    animation: fadeUp 0.6s ease 0.1s both;
+  }
+  .hero h1 em {
+    font-style: normal;
+    background: linear-gradient(90deg, var(--orange), var(--yellow));
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  }
+  .hero-sub {
+    margin-top: 1.2rem; color: var(--muted);
+    font-size: 1.05rem; line-height: 1.7; max-width: 580px; margin-inline: auto;
+    animation: fadeUp 0.6s ease 0.2s both;
+  }
+  .hero-stats {
+    display: flex; justify-content: center; gap: 2.5rem;
+    margin-top: 2.5rem;
+    animation: fadeUp 0.6s ease 0.3s both;
+  }
+  .stat { text-align: center; }
+  .stat-num {
+    font-family: 'Space Mono', monospace;
+    font-size: 1.5rem; font-weight: 700;
+    color: var(--orange);
+  }
+  .stat-label { font-size: 0.75rem; color: var(--muted); margin-top: 0.2rem; text-transform: uppercase; letter-spacing: 0.05em; }
+
+  /* MAIN TOOL */
+  .tool-section {
+    position: relative; z-index: 1;
+    max-width: 960px; margin: 2rem auto 4rem;
+    padding: 0 1.5rem;
+    animation: fadeUp 0.7s ease 0.4s both;
+  }
+  .tool-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    overflow: hidden;
+  }
+  .tool-header {
+    padding: 1.2rem 1.5rem;
+    background: var(--surface2);
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .tool-title {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.8rem; color: var(--orange);
+    text-transform: uppercase; letter-spacing: 0.1em;
+  }
+  .credits-badge {
+    display: flex; align-items: center; gap: 0.5rem;
+    background: rgba(255,209,102,0.1);
+    border: 1px solid rgba(255,209,102,0.25);
+    padding: 0.3rem 0.8rem; border-radius: 999px;
+    font-family: 'Space Mono', monospace;
+    font-size: 0.75rem; color: var(--yellow);
+  }
+  .tool-body { padding: 1.5rem; }
+
+  /* STEP INDICATOR */
+  .steps {
+    display: flex; gap: 0.5rem; margin-bottom: 1.5rem;
+  }
+  .step-pill {
+    flex: 1; padding: 0.5rem; border-radius: 8px;
+    text-align: center; font-size: 0.72rem; font-weight: 700;
+    letter-spacing: 0.05em; text-transform: uppercase;
+    border: 1px solid var(--border);
+    color: var(--muted); background: transparent;
+    transition: all 0.3s;
+    cursor: pointer;
+  }
+  .step-pill.active {
+    background: rgba(255,107,43,0.12);
+    border-color: var(--orange);
+    color: var(--orange);
+  }
+  .step-pill.done {
+    background: rgba(34,211,160,0.08);
+    border-color: var(--green);
+    color: var(--green);
+  }
+
+  /* FORM AREA */
+  .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+  @media(max-width: 600px) { .form-grid { grid-template-columns: 1fr; } }
+
+  .form-group { display: flex; flex-direction: column; gap: 0.4rem; }
+  .form-group.full { grid-column: 1 / -1; }
+  label {
+    font-size: 0.78rem; font-weight: 600;
+    color: var(--muted); text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+  input, select, textarea {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    font-family: 'Space Mono', monospace;
+    font-size: 0.85rem;
+    padding: 0.7rem 1rem;
+    outline: none;
+    transition: border-color 0.2s;
+    width: 100%;
+  }
+  input:focus, select:focus, textarea:focus {
+    border-color: var(--orange);
+  }
+  select option { background: var(--surface2); }
+  textarea { resize: vertical; min-height: 90px; }
+
+  .service-chips {
+    display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.5rem;
+  }
+  .chip {
+    padding: 0.4rem 0.85rem;
+    border-radius: 999px;
+    font-size: 0.75rem; font-weight: 700;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    cursor: pointer;
+    transition: all 0.2s;
+    user-select: none;
+  }
+  .chip:hover { border-color: var(--orange); color: var(--orange); }
+  .chip.selected {
+    background: rgba(255,107,43,0.15);
+    border-color: var(--orange);
+    color: var(--orange2);
+  }
+
+  .estimate-btn {
+    width: 100%; margin-top: 1.5rem;
+    padding: 0.9rem;
+    background: var(--orange);
+    color: #000;
+    border: none; border-radius: 10px;
+    font-family: 'Syne', sans-serif;
+    font-size: 1rem; font-weight: 800;
+    cursor: pointer;
+    transition: all 0.2s;
+    letter-spacing: 0.02em;
+    position: relative; overflow: hidden;
+  }
+  .estimate-btn:hover { background: var(--orange2); transform: translateY(-1px); }
+  .estimate-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+  .estimate-btn .btn-spinner {
+    display: none;
+    width: 16px; height: 16px;
+    border: 2px solid rgba(0,0,0,0.3);
+    border-top-color: #000;
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    margin-right: 8px;
+    vertical-align: middle;
+  }
+  .estimate-btn.loading .btn-spinner { display: inline-block; }
+  .estimate-btn.loading .btn-text { opacity: 0.6; }
+
+  /* RESULT */
+  .result-panel {
+    display: none;
+    margin-top: 1.5rem;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+  .result-panel.visible { display: block; }
+  .result-header {
+    padding: 1rem 1.5rem;
+    background: rgba(34,211,160,0.06);
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .result-title {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.75rem; color: var(--green);
+    text-transform: uppercase; letter-spacing: 0.1em;
+  }
+  .result-body { padding: 1.5rem; }
+
+  .cost-summary {
+    display: grid; grid-template-columns: repeat(3, 1fr);
+    gap: 1rem; margin-bottom: 1.5rem;
+  }
+  @media(max-width: 600px) { .cost-summary { grid-template-columns: 1fr 1fr; } }
+
+  .cost-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 1rem;
+    text-align: center;
+  }
+  .cost-card-label { font-size: 0.7rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+  .cost-card-value {
+    font-family: 'Space Mono', monospace;
+    font-size: 1.3rem; font-weight: 700;
+    margin-top: 0.3rem;
+    color: var(--yellow);
+  }
+  .cost-card-value.usd { color: var(--orange); }
+
+  .ai-response {
+    font-size: 0.88rem; line-height: 1.8;
+    color: var(--text);
+    white-space: pre-wrap;
+  }
+
+  .breakdown-table {
+    width: 100%; border-collapse: collapse;
+    margin-top: 1.2rem;
+    font-family: 'Space Mono', monospace;
+    font-size: 0.78rem;
+  }
+  .breakdown-table th {
+    text-align: left; padding: 0.6rem 0.8rem;
+    color: var(--muted); font-size: 0.7rem;
+    text-transform: uppercase; letter-spacing: 0.06em;
+    border-bottom: 1px solid var(--border);
+  }
+  .breakdown-table td {
+    padding: 0.7rem 0.8rem;
+    border-bottom: 1px solid rgba(31,37,51,0.6);
+    color: var(--text);
+  }
+  .breakdown-table tr:hover td { background: rgba(255,107,43,0.04); }
+  .cost-val { color: var(--orange2); font-weight: 700; }
+
+  /* PRICING */
+  .pricing-section {
+    position: relative; z-index: 1;
+    max-width: 900px; margin: 0 auto 5rem;
+    padding: 0 1.5rem;
+  }
+  .section-label {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.75rem; color: var(--orange);
+    text-transform: uppercase; letter-spacing: 0.12em;
+    margin-bottom: 0.8rem;
+  }
+  .section-title {
+    font-size: 1.9rem; font-weight: 800;
+    letter-spacing: -0.02em; margin-bottom: 2.5rem;
+  }
+  .pricing-grid {
+    display: grid; grid-template-columns: repeat(3, 1fr);
+    gap: 1rem;
+  }
+  @media(max-width: 700px) { .pricing-grid { grid-template-columns: 1fr; } }
+
+  .price-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 1.5rem;
+    transition: border-color 0.3s;
+  }
+  .price-card:hover { border-color: rgba(255,107,43,0.4); }
+  .price-card.featured {
+    border-color: var(--orange);
+    background: linear-gradient(145deg, rgba(255,107,43,0.07), var(--surface));
+    position: relative;
+  }
+  .popular-tag {
+    position: absolute; top: -12px; left: 50%; transform: translateX(-50%);
+    background: var(--orange); color: #000;
+    font-size: 0.65rem; font-weight: 800; padding: 0.25rem 0.8rem;
+    border-radius: 999px; text-transform: uppercase; letter-spacing: 0.1em;
+    white-space: nowrap;
+  }
+  .price-name { font-size: 0.8rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+  .price-val {
+    font-family: 'Space Mono', monospace;
+    font-size: 2rem; font-weight: 700;
+    color: var(--text); margin: 0.8rem 0 0.2rem;
+  }
+  .price-val span { font-size: 0.9rem; color: var(--muted); }
+  .price-desc { font-size: 0.82rem; color: var(--muted); margin-bottom: 1.2rem; }
+  .price-features { list-style: none; display: flex; flex-direction: column; gap: 0.6rem; }
+  .price-features li {
+    font-size: 0.82rem; color: var(--muted);
+    display: flex; align-items: flex-start; gap: 0.5rem;
+  }
+  .price-features li::before { content: '→'; color: var(--orange); flex-shrink: 0; }
+  .price-features li.green::before { color: var(--green); content: '✓'; }
+
+  .buy-btn {
+    width: 100%; margin-top: 1.5rem;
+    padding: 0.7rem;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text);
+    font-family: 'Syne', sans-serif;
+    font-size: 0.88rem; font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .buy-btn:hover { border-color: var(--orange); color: var(--orange); }
+  .buy-btn.primary { background: var(--orange); border-color: var(--orange); color: #000; }
+  .buy-btn.primary:hover { background: var(--orange2); }
+
+  /* HOW IT WORKS */
+  .how-section {
+    position: relative; z-index: 1;
+    max-width: 900px; margin: 0 auto 5rem;
+    padding: 0 1.5rem;
+  }
+  .how-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; }
+  @media(max-width: 700px) { .how-grid { grid-template-columns: 1fr 1fr; } }
+  .how-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.2rem;
+  }
+  .how-num {
+    font-family: 'Space Mono', monospace;
+    font-size: 1.5rem; font-weight: 700;
+    color: rgba(255,107,43,0.25);
+    margin-bottom: 0.8rem;
+  }
+  .how-title { font-size: 0.9rem; font-weight: 700; margin-bottom: 0.4rem; }
+  .how-desc { font-size: 0.78rem; color: var(--muted); line-height: 1.6; }
+
+  /* FOOTER */
+  footer {
+    position: relative; z-index: 1;
+    border-top: 1px solid var(--border);
+    padding: 2rem;
+    text-align: center;
+    font-family: 'Space Mono', monospace;
+    font-size: 0.75rem; color: var(--muted);
+  }
+  footer a { color: var(--orange); text-decoration: none; }
+
+  /* MODAL */
+  .modal-overlay {
+    display: none; position: fixed; inset: 0; z-index: 200;
+    background: rgba(0,0,0,0.7); backdrop-filter: blur(8px);
+    align-items: center; justify-content: center;
+  }
+  .modal-overlay.open { display: flex; }
+  .modal {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 2rem;
+    max-width: 420px; width: 90%;
+    position: relative;
+  }
+  .modal h3 { font-size: 1.2rem; font-weight: 800; margin-bottom: 0.5rem; }
+  .modal p { font-size: 0.85rem; color: var(--muted); margin-bottom: 1.5rem; line-height: 1.6; }
+  .modal-close {
+    position: absolute; top: 1rem; right: 1rem;
+    background: none; border: none; color: var(--muted);
+    font-size: 1.2rem; cursor: pointer;
+  }
+  .razorpay-note {
+    background: rgba(34,211,160,0.07);
+    border: 1px solid rgba(34,211,160,0.2);
+    border-radius: 8px;
+    padding: 0.8rem; font-size: 0.8rem;
+    color: var(--green); margin-top: 1rem; text-align: center;
+  }
+
+  /* ANIMATIONS */
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(18px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* TOAST */
+  .toast {
+    position: fixed; bottom: 2rem; right: 2rem; z-index: 300;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 0.9rem 1.3rem;
+    font-size: 0.85rem;
+    transform: translateY(80px); opacity: 0;
+    transition: all 0.35s ease;
+    max-width: 300px;
+  }
+  .toast.show { transform: translateY(0); opacity: 1; }
+  .toast.success { border-color: var(--green); color: var(--green); }
+  .toast.error { border-color: var(--red); color: var(--red); }
+
+  /* LOADING SHIMMER */
+  .shimmer {
+    background: linear-gradient(90deg, var(--surface2) 25%, var(--border) 50%, var(--surface2) 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
+    border-radius: 6px; height: 14px;
+  }
+  @keyframes shimmer { to { background-position: -200% 0; } }
+
+  /* TYPEWRITER cursor */
+  .cursor { display: inline-block; width: 2px; height: 1em; background: var(--orange); animation: blink 1s step-end infinite; margin-left: 2px; vertical-align: text-bottom; }
+  @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <div class="logo">Cloud<span>Cost</span>.io</div>
+  <div class="nav-links">
+    <a href="#how">How it works</a>
+    <a href="#pricing">Pricing</a>
+    <a href="#tool" class="nav-cta">Try Free →</a>
+  </div>
+</nav>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="hero-badge">⚡ AI-Powered · Instant · Accurate</div>
+  <h1>AWS Cost Estimates<br/><em>in 10 Seconds Flat</em></h1>
+  <p class="hero-sub">Describe your infrastructure in plain English. Our AI analyzes your stack and generates a detailed AWS cost breakdown — no spreadsheets, no guesswork.</p>
+  <div class="hero-stats">
+    <div class="stat"><div class="stat-num">10s</div><div class="stat-label">Avg estimate time</div></div>
+    <div class="stat"><div class="stat-num">50+</div><div class="stat-label">AWS services covered</div></div>
+    <div class="stat"><div class="stat-num">₹49</div><div class="stat-label">Per estimate</div></div>
+  </div>
+</section>
+
+<!-- TOOL -->
+<section class="tool-section" id="tool">
+  <div class="tool-card">
+    <div class="tool-header">
+      <span class="tool-title">⚙ AWS Cost Estimator</span>
+      <span class="credits-badge" id="creditsDisplay">🪙 3 free credits remaining</span>
+    </div>
+    <div class="tool-body">
+
+      <!-- STEPS -->
+      <div class="steps">
+        <div class="step-pill active" id="step1pill">1. Describe</div>
+        <div class="step-pill" id="step2pill">2. Configure</div>
+        <div class="step-pill" id="step3pill">3. Estimate</div>
+      </div>
+
+      <!-- STEP 1: Services -->
+      <div id="step1">
+        <div class="form-group" style="margin-bottom:1rem;">
+          <label>Select AWS Services (click all that apply)</label>
+          <div class="service-chips" id="serviceChips">
+            <div class="chip" data-service="EC2">EC2</div>
+            <div class="chip" data-service="RDS">RDS</div>
+            <div class="chip" data-service="S3">S3</div>
+            <div class="chip" data-service="Lambda">Lambda</div>
+            <div class="chip" data-service="CloudFront">CloudFront</div>
+            <div class="chip" data-service="EKS">EKS</div>
+            <div class="chip" data-service="ECS">ECS</div>
+            <div class="chip" data-service="ElastiCache">ElastiCache</div>
+            <div class="chip" data-service="SQS">SQS</div>
+            <div class="chip" data-service="SNS">SNS</div>
+            <div class="chip" data-service="API Gateway">API Gateway</div>
+            <div class="chip" data-service="DynamoDB">DynamoDB</div>
+            <div class="chip" data-service="Elasticsearch">OpenSearch</div>
+            <div class="chip" data-service="NAT Gateway">NAT Gateway</div>
+            <div class="chip" data-service="Route 53">Route 53</div>
+          </div>
+        </div>
+        <div class="form-group" style="margin-bottom:1rem;">
+          <label>Describe your use case</label>
+          <textarea id="usecase" placeholder="e.g. A SaaS app with 10k monthly users. We need 2 EC2 t3.medium instances behind a load balancer, a PostgreSQL RDS db.t3.small, S3 for file storage (~50GB), and CloudFront for static assets."></textarea>
+        </div>
+        <button class="estimate-btn" onclick="goToStep2()">Next: Configure Details →</button>
+      </div>
+
+      <!-- STEP 2: Config -->
+      <div id="step2" style="display:none;">
+        <div class="form-grid">
+          <div class="form-group">
+            <label>AWS Region</label>
+            <select id="region">
+              <option>us-east-1 (N. Virginia)</option>
+              <option>us-west-2 (Oregon)</option>
+              <option>ap-south-1 (Mumbai)</option>
+              <option>ap-southeast-1 (Singapore)</option>
+              <option>eu-west-1 (Ireland)</option>
+              <option>ap-northeast-1 (Tokyo)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Expected Monthly Traffic</label>
+            <select id="traffic">
+              <option>Low (< 10k req/day)</option>
+              <option>Medium (10k–100k req/day)</option>
+              <option>High (100k–1M req/day)</option>
+              <option>Very High (> 1M req/day)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Pricing Model</label>
+            <select id="pricingModel">
+              <option>On-Demand (no commitment)</option>
+              <option>1-Year Reserved Instances</option>
+              <option>3-Year Reserved Instances</option>
+              <option>Spot Instances (variable)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Environment</label>
+            <select id="environment">
+              <option>Production</option>
+              <option>Staging</option>
+              <option>Development</option>
+            </select>
+          </div>
+          <div class="form-group full">
+            <label>Additional requirements (optional)</label>
+            <textarea id="additionalReqs" placeholder="e.g. Multi-AZ for high availability, automated backups, SSL certificates, monitoring with CloudWatch..." style="min-height:70px;"></textarea>
+          </div>
+        </div>
+        <button class="estimate-btn" onclick="runEstimate()">
+          <span class="btn-spinner"></span>
+          <span class="btn-text">⚡ Generate Cost Estimate</span>
+        </button>
+        <p style="font-size:0.72rem;color:var(--muted);text-align:center;margin-top:0.6rem;">
+          Uses 1 credit · <a href="#pricing" style="color:var(--orange);">Buy more credits</a>
+        </p>
+      </div>
+
+      <!-- RESULT PANEL -->
+      <div class="result-panel" id="resultPanel">
+        <div class="result-header">
+          <span class="result-title">✓ Estimate Complete</span>
+          <span style="font-size:0.75rem;color:var(--muted);font-family:'Space Mono',monospace;" id="resultTimestamp"></span>
+        </div>
+        <div class="result-body">
+          <div class="cost-summary" id="costSummary">
+            <div class="cost-card">
+              <div class="cost-card-label">Monthly (USD)</div>
+              <div class="cost-card-value usd" id="monthlyUSD">—</div>
+            </div>
+            <div class="cost-card">
+              <div class="cost-card-label">Monthly (INR)</div>
+              <div class="cost-card-value" id="monthlyINR">—</div>
+            </div>
+            <div class="cost-card">
+              <div class="cost-card-label">Annual (USD)</div>
+              <div class="cost-card-value" id="annualUSD">—</div>
+            </div>
+          </div>
+          <div class="ai-response" id="aiResponse"></div>
+          <div id="breakdownTableWrap"></div>
+          <div style="display:flex;gap:0.8rem;margin-top:1.5rem;flex-wrap:wrap;">
+            <button class="buy-btn primary" onclick="openModal('report')" style="flex:1;min-width:160px;">📄 Download PDF Report</button>
+            <button class="buy-btn" onclick="runEstimate()" style="flex:1;min-width:140px;">↺ Re-estimate</button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- HOW IT WORKS -->
+<section class="how-section" id="how">
+  <div class="section-label">// Process</div>
+  <div class="section-title">How it works</div>
+  <div class="how-grid">
+    <div class="how-card">
+      <div class="how-num">01</div>
+      <div class="how-title">Describe your stack</div>
+      <div class="how-desc">Select services and describe your architecture in plain English.</div>
+    </div>
+    <div class="how-card">
+      <div class="how-num">02</div>
+      <div class="how-title">Configure details</div>
+      <div class="how-desc">Set region, traffic, pricing model and environment preferences.</div>
+    </div>
+    <div class="how-card">
+      <div class="how-num">03</div>
+      <div class="how-title">AI analyzes</div>
+      <div class="how-desc">Our AI cross-references live AWS pricing data and your requirements.</div>
+    </div>
+    <div class="how-card">
+      <div class="how-num">04</div>
+      <div class="how-title">Get breakdown</div>
+      <div class="how-desc">Receive a detailed cost breakdown with optimization suggestions.</div>
+    </div>
+  </div>
+</section>
+
+<!-- PRICING -->
+<section class="pricing-section" id="pricing">
+  <div class="section-label">// Pricing</div>
+  <div class="section-title">Simple, pay-per-use</div>
+  <div class="pricing-grid">
+    <div class="price-card">
+      <div class="price-name">Starter</div>
+      <div class="price-val">₹149 <span>/ 5 credits</span></div>
+      <div class="price-desc">Perfect for a quick project estimate</div>
+      <ul class="price-features">
+        <li>5 cost estimates</li>
+        <li>All AWS services</li>
+        <li>USD + INR breakdown</li>
+        <li>Valid 30 days</li>
+      </ul>
+      <button class="buy-btn" onclick="openModal('starter')">Buy Starter Pack</button>
+    </div>
+    <div class="price-card featured">
+      <div class="popular-tag">Most Popular</div>
+      <div class="price-name">Pro</div>
+      <div class="price-val">₹499 <span>/ 20 credits</span></div>
+      <div class="price-desc">For teams planning infra regularly</div>
+      <ul class="price-features">
+        <li class="green">20 cost estimates</li>
+        <li class="green">PDF report download</li>
+        <li class="green">Cost optimization tips</li>
+        <li class="green">Priority AI response</li>
+        <li class="green">Valid 90 days</li>
+      </ul>
+      <button class="buy-btn primary" onclick="openModal('pro')">Buy Pro Pack</button>
+    </div>
+    <div class="price-card">
+      <div class="price-name">Team</div>
+      <div class="price-val">₹1,499 <span>/ 100 credits</span></div>
+      <div class="price-desc">For agencies & DevOps teams</div>
+      <ul class="price-features">
+        <li>100 cost estimates</li>
+        <li>Shareable reports</li>
+        <li>Multi-region compare</li>
+        <li>Reserved vs On-Demand compare</li>
+        <li>Valid 180 days</li>
+      </ul>
+      <button class="buy-btn" onclick="openModal('team')">Buy Team Pack</button>
+    </div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <p>CloudCost.io — AI-Powered AWS Cost Estimator · Built in India 🇮🇳</p>
+  <p style="margin-top:0.5rem;"><a href="#">Privacy Policy</a> · <a href="#">Terms</a> · <a href="mailto:hello@cloudcost.io">Contact</a></p>
+</footer>
+
+<!-- MODAL -->
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal">
+    <button class="modal-close" onclick="closeModal()">✕</button>
+    <h3 id="modalTitle">Complete Purchase</h3>
+    <p id="modalDesc">You're about to purchase the Pro Pack — 20 credits for ₹499.</p>
+    <input type="email" id="modalEmail" placeholder="your@email.com" style="margin-bottom:0.8rem;"/>
+    <button class="buy-btn primary" onclick="simulatePurchase()" style="margin-top:0;">Pay with Razorpay →</button>
+    <div class="razorpay-note">🔒 Secure payment via Razorpay · UPI / Cards / NetBanking</div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ── STATE ──────────────────────────────────────────
+let freeCredits = 3;
+let selectedServices = [];
+let currentPlan = '';
+
+// ── CHIPS ──────────────────────────────────────────
+document.querySelectorAll('.chip').forEach(chip => {
+  chip.addEventListener('click', () => {
+    chip.classList.toggle('selected');
+    const svc = chip.dataset.service;
+    if (chip.classList.contains('selected')) {
+      selectedServices.push(svc);
+    } else {
+      selectedServices = selectedServices.filter(s => s !== svc);
+    }
+  });
+});
+
+// ── STEP NAV ───────────────────────────────────────
+function goToStep2() {
+  const usecase = document.getElementById('usecase').value.trim();
+  if (!usecase && selectedServices.length === 0) {
+    showToast('Please describe your use case or select services.', 'error');
+    return;
+  }
+  document.getElementById('step1').style.display = 'none';
+  document.getElementById('step2').style.display = 'block';
+  document.getElementById('step1pill').className = 'step-pill done';
+  document.getElementById('step2pill').className = 'step-pill active';
+}
+
+// ── ESTIMATE ───────────────────────────────────────
+async function runEstimate() {
+  if (freeCredits <= 0) {
+    openModal('pro');
+    return;
+  }
+
+  const btn = document.querySelector('#step2 .estimate-btn');
+  btn.disabled = true;
+  btn.classList.add('loading');
+  btn.querySelector('.btn-text').textContent = 'Analyzing your stack…';
+
+  document.getElementById('resultPanel').classList.remove('visible');
+  document.getElementById('step3pill').className = 'step-pill active';
+
+  const usecase = document.getElementById('usecase').value;
+  const region = document.getElementById('region').value;
+  const traffic = document.getElementById('traffic').value;
+  const pricingModel = document.getElementById('pricingModel').value;
+  const environment = document.getElementById('environment').value;
+  const additional = document.getElementById('additionalReqs').value;
+  const services = selectedServices.length > 0 ? selectedServices.join(', ') : 'Not specified';
+
+  const prompt = `You are an expert AWS Solutions Architect and cost analyst. 
+Estimate the monthly AWS infrastructure cost for the following setup:
+
+**AWS Services:** ${services}
+**Use Case Description:** ${usecase}
+**AWS Region:** ${region}
+**Expected Traffic:** ${traffic}
+**Pricing Model:** ${pricingModel}
+**Environment:** ${environment}
+**Additional Requirements:** ${additional || 'None'}
+
+Provide a detailed response in this EXACT JSON format only, no markdown:
+{
+  "monthly_usd": <number>,
+  "annual_usd": <number>,
+  "usd_inr_rate": 83.5,
+  "breakdown": [
+    {"service": "EC2 (t3.medium x2)", "monthly_usd": 60.50, "notes": "On-demand Linux"},
+    {"service": "RDS db.t3.small", "monthly_usd": 28.00, "notes": "Single-AZ PostgreSQL"},
+    {"service": "S3 50GB storage", "monthly_usd": 1.15, "notes": "Standard tier"}
+  ],
+  "summary": "2-3 sentence summary of the estimate",
+  "optimizations": ["tip 1", "tip 2", "tip 3"],
+  "confidence": "medium"
+}
+Return ONLY the JSON. No extra text.`;
+
+  try {
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 1000,
+        messages: [{ role: "user", content: prompt }]
+      })
+    });
+
+    const data = await response.json();
+    const rawText = data.content.map(i => i.text || '').join('');
+
+    let result;
+    try {
+      const clean = rawText.replace(/```json|```/g, '').trim();
+      result = JSON.parse(clean);
+    } catch {
+      throw new Error("Could not parse AI response. Please try again.");
+    }
+
+    freeCredits--;
+    updateCreditsDisplay();
+    renderResult(result);
+
+  } catch (err) {
+    showToast('Error: ' + err.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.classList.remove('loading');
+    btn.querySelector('.btn-text').textContent = '⚡ Generate Cost Estimate';
+  }
+}
+
+function renderResult(r) {
+  const inr = r.monthly_usd * (r.usd_inr_rate || 83.5);
+  document.getElementById('monthlyUSD').textContent = '$' + r.monthly_usd.toFixed(2);
+  document.getElementById('monthlyINR').textContent = '₹' + Math.round(inr).toLocaleString('en-IN');
+  document.getElementById('annualUSD').textContent = '$' + r.annual_usd.toFixed(2);
+  document.getElementById('resultTimestamp').textContent = new Date().toLocaleTimeString();
+
+  // Breakdown table
+  let tableHTML = '<table class="breakdown-table"><thead><tr><th>Service</th><th>Monthly (USD)</th><th>Monthly (INR)</th><th>Notes</th></tr></thead><tbody>';
+  (r.breakdown || []).forEach(row => {
+    const rowInr = row.monthly_usd * (r.usd_inr_rate || 83.5);
+    tableHTML += `<tr>
+      <td>${row.service}</td>
+      <td class="cost-val">$${row.monthly_usd.toFixed(2)}</td>
+      <td>₹${Math.round(rowInr).toLocaleString('en-IN')}</td>
+      <td style="color:var(--muted)">${row.notes || ''}</td>
+    </tr>`;
+  });
+  tableHTML += '</tbody></table>';
+  document.getElementById('breakdownTableWrap').innerHTML = tableHTML;
+
+  // Summary + tips
+  let summaryHTML = '';
+  if (r.summary) summaryHTML += `<p style="margin-top:1rem;color:var(--muted);font-size:0.85rem;line-height:1.7;">${r.summary}</p>`;
+  if (r.optimizations && r.optimizations.length > 0) {
+    summaryHTML += `<div style="margin-top:1.2rem;padding:1rem;background:rgba(255,209,102,0.06);border:1px solid rgba(255,209,102,0.15);border-radius:10px;">
+      <div style="font-size:0.72rem;color:var(--yellow);text-transform:uppercase;letter-spacing:0.1em;font-weight:700;margin-bottom:0.7rem;">💡 Cost Optimization Tips</div>
+      <ul style="list-style:none;display:flex;flex-direction:column;gap:0.5rem;">
+        ${r.optimizations.map(t => `<li style="font-size:0.82rem;color:var(--muted);">→ ${t}</li>`).join('')}
+      </ul>
+    </div>`;
+  }
+  document.getElementById('aiResponse').innerHTML = summaryHTML;
+
+  document.getElementById('resultPanel').classList.add('visible');
+  document.getElementById('step3pill').className = 'step-pill done';
+  document.getElementById('resultPanel').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  showToast('Estimate complete! 🎉', 'success');
+}
+
+function updateCreditsDisplay() {
+  const el = document.getElementById('creditsDisplay');
+  if (freeCredits <= 0) {
+    el.textContent = '🪙 0 credits — Buy more';
+    el.style.color = 'var(--red)';
+    el.style.borderColor = 'rgba(255,77,109,0.3)';
+    el.style.cursor = 'pointer';
+    el.onclick = () => openModal('pro');
+  } else {
+    el.textContent = `🪙 ${freeCredits} free credit${freeCredits !== 1 ? 's' : ''} remaining`;
+  }
+}
+
+// ── MODAL ──────────────────────────────────────────
+const planDetails = {
+  starter: { title: '🚀 Starter Pack', desc: '5 estimates for ₹149. Perfect for quick project scoping.', price: '₹149' },
+  pro:     { title: '⚡ Pro Pack',     desc: '20 estimates for ₹499. Includes PDF reports and optimization tips.', price: '₹499' },
+  team:    { title: '🏢 Team Pack',    desc: '100 estimates for ₹1,499. For agencies and DevOps teams.', price: '₹1,499' },
+  report:  { title: '📄 PDF Report',  desc: 'Download a formatted PDF report of this estimate for ₹49.', price: '₹49' },
+};
+
+function openModal(plan) {
+  currentPlan = plan;
+  const p = planDetails[plan] || planDetails.pro;
+  document.getElementById('modalTitle').textContent = p.title;
+  document.getElementById('modalDesc').textContent = p.desc;
+  document.getElementById('modalOverlay').classList.add('open');
+}
+
+function closeModal() {
+  document.getElementById('modalOverlay').classList.remove('open');
+}
+
+document.getElementById('modalOverlay').addEventListener('click', e => {
+  if (e.target === document.getElementById('modalOverlay')) closeModal();
+});
+
+function simulatePurchase() {
+  const email = document.getElementById('modalEmail').value;
+  if (!email || !email.includes('@')) {
+    showToast('Please enter a valid email.', 'error');
+    return;
+  }
+  closeModal();
+  showToast('✓ Redirecting to Razorpay checkout…', 'success');
+  // In production: integrate Razorpay JS SDK here
+  setTimeout(() => {
+    showToast('💡 Integrate Razorpay SDK here in production!', '');
+  }, 2000);
+}
+
+// ── TOAST ──────────────────────────────────────────
+let toastTimer;
+function showToast(msg, type) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast show ' + type;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { t.classList.remove('show'); }, 3500);
+}
+</script>
+</body>
+</html>
