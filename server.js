@@ -5,14 +5,76 @@ const path = require('path');
 const sqlite3 = require('sqlite3').verbose();
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || 'super_secret_dev_key_change_me_in_prod';
 
-// Middleware
-app.use(cors());
-app.use(express.json());
+// ── SECURITY: Warn if using default JWT secret ──
+if (JWT_SECRET === 'super_secret_dev_key_change_me_in_prod') {
+  console.warn('⚠️  WARNING: Using default JWT_SECRET. Set a real secret in .env for production!');
+}
+
+// ── SECURITY: Helmet sets secure HTTP headers ──
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'"],  // needed for inline JS in index.html
+      styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+      fontSrc: ["'self'", "https://fonts.gstatic.com"],
+      imgSrc: ["'self'", "data:"],
+      connectSrc: ["'self'"],
+    },
+  },
+}));
+
+// ── SECURITY: CORS — restrict in production ──
+const allowedOrigins = process.env.ALLOWED_ORIGINS
+  ? process.env.ALLOWED_ORIGINS.split(',')
+  : ['http://localhost:3000'];
+app.use(cors({
+  origin: function (origin, callback) {
+    // Allow requests with no origin (mobile apps, curl, same-origin)
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true,
+}));
+
+// ── SECURITY: Limit request body size to 10KB ──
+app.use(express.json({ limit: '10kb' }));
+
+// ── SECURITY: Rate limiting — prevent brute force & abuse ──
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 10,                   // 10 attempts per window
+  message: { error: 'Too many attempts. Please try again in 15 minutes.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+const estimateLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 5,              // 5 estimates per minute
+  message: { error: 'Too many requests. Please slow down.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+const globalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 100,            // 100 requests per 15 min per IP
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+app.use(globalLimiter);
+
 app.use(express.static(path.join(__dirname, 'public')));
 
 // ── Database Setup (SQLite) ──
@@ -22,7 +84,6 @@ const db = new sqlite3.Database(dbPath, (err) => {
   else console.log('✅ Connected to SQLite database.');
 });
 
-// Create tables if they don't exist
 db.serialize(() => {
   db.run(`
     CREATE TABLE IF NOT EXISTS users (
@@ -35,10 +96,23 @@ db.serialize(() => {
   `);
 });
 
+// ── SECURITY: Input sanitizer ──
+function sanitize(str) {
+  if (typeof str !== 'string') return '';
+  return str.replace(/[<>"'&]/g, (char) => {
+    const map = { '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;', '&': '&amp;' };
+    return map[char] || char;
+  }).trim().slice(0, 2000); // Cap input length
+}
+
+function isValidEmail(email) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) && email.length <= 254;
+}
+
 // ── Auth Middleware ──
 function authenticateToken(req, res, next) {
   const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
+  const token = authHeader && authHeader.split(' ')[1];
 
   if (!token) return res.status(401).json({ error: 'Please log in or create an account to continue.' });
 
@@ -49,20 +123,25 @@ function authenticateToken(req, res, next) {
   });
 }
 
-// ── API Route: Register ──
-app.post('/api/auth/register', async (req, res) => {
+// ── API Route: Register (RATE LIMITED) ──
+app.post('/api/auth/register', authLimiter, async (req, res) => {
   const { email, password } = req.body;
 
-  if (!email || !password || password.length < 6) {
-    return res.status(400).json({ error: 'Valid email and password (minimum 6 characters) are required.' });
+  // SECURITY: Validate email format
+  if (!email || !isValidEmail(email)) {
+    return res.status(400).json({ error: 'Please enter a valid email address.' });
+  }
+  if (!password || password.length < 6 || password.length > 128) {
+    return res.status(400).json({ error: 'Password must be 6-128 characters.' });
   }
 
   try {
-    const hash = await bcrypt.hash(password, 10);
+    const sanitizedEmail = email.toLowerCase().trim();
+    const hash = await bcrypt.hash(password, 12); // SECURITY: increased from 10 to 12 rounds
 
     db.run(
       'INSERT INTO users (email, password_hash) VALUES (?, ?)',
-      [email, hash],
+      [sanitizedEmail, hash],
       function (err) {
         if (err) {
           if (err.message.includes('UNIQUE constraint failed')) {
@@ -73,12 +152,12 @@ app.post('/api/auth/register', async (req, res) => {
         }
 
         const userId = this.lastID;
-        const token = jwt.sign({ id: userId, email }, JWT_SECRET, { expiresIn: '7d' });
+        const token = jwt.sign({ id: userId, email: sanitizedEmail }, JWT_SECRET, { expiresIn: '7d' });
 
         res.status(201).json({
           message: 'Account created successfully!',
           token,
-          user: { id: userId, email, free_credits: 3 }
+          user: { id: userId, email: sanitizedEmail, free_credits: 3 }
         });
       }
     );
@@ -88,15 +167,17 @@ app.post('/api/auth/register', async (req, res) => {
   }
 });
 
-// ── API Route: Login ──
-app.post('/api/auth/login', (req, res) => {
+// ── API Route: Login (RATE LIMITED) ──
+app.post('/api/auth/login', authLimiter, (req, res) => {
   const { email, password } = req.body;
 
   if (!email || !password) {
     return res.status(400).json({ error: 'Email and password are required.' });
   }
 
-  db.get('SELECT * FROM users WHERE email = ?', [email], async (err, user) => {
+  const sanitizedEmail = email.toLowerCase().trim();
+
+  db.get('SELECT * FROM users WHERE email = ?', [sanitizedEmail], async (err, user) => {
     if (err) {
       console.error(err);
       return res.status(500).json({ error: 'Internal server error.' });
@@ -130,7 +211,7 @@ app.get('/api/user/me', authenticateToken, (req, res) => {
   });
 });
 
-// ── Demo data generator (used when no API key is configured) ──
+// ── Demo data generator ──
 function generateDemoEstimate(services, usecase, region, traffic, pricingModel, environment) {
   const serviceList = services.split(',').map(s => s.trim()).filter(Boolean);
 
@@ -162,7 +243,6 @@ function generateDemoEstimate(services, usecase, region, traffic, pricingModel, 
     'Secrets Manager': { base: 2.00, notes: '5 secrets, 10K API calls/mo' },
   };
 
-  // Traffic multipliers
   const trafficMultiplier = { 'Low': 0.7, 'Medium': 1.0, 'High': 2.2, 'Very High': 4.5 };
   const envMultiplier = { 'Production': 1.0, 'Staging': 0.6, 'Development': 0.35 };
   const pricingMultiplier = { 'On-Demand': 1.0, '1-Year Reserved': 0.65, '3-Year Reserved': 0.42, 'Spot': 0.35 };
@@ -176,7 +256,7 @@ function generateDemoEstimate(services, usecase, region, traffic, pricingModel, 
     const pricing = match ? match[1] : { base: 15.00, notes: 'Estimated usage' };
     const cost = Math.round(pricing.base * tMult * eMult * pMult * 100) / 100;
     return {
-      service: svc,
+      service: sanitize(svc),
       monthly_usd: cost,
       notes: pricing.notes + (pMult < 1 ? ` (${pricingModel.split(' ')[0]} pricing)` : ''),
     };
@@ -197,7 +277,7 @@ function generateDemoEstimate(services, usecase, region, traffic, pricingModel, 
     annual_usd: Math.round(monthly_usd * 12 * 100) / 100,
     usd_inr_rate: 83.5,
     breakdown: breakdown.map(b => ({ ...b, monthly_usd: Math.round(b.monthly_usd * 100) / 100 })),
-    summary: `Estimated monthly cost for a ${environment.toLowerCase()} environment in ${region.split(' ')[0]} using ${pricingModel.split('(')[0].trim()} pricing. Covers ${breakdown.length} service(s) with ${traffic.toLowerCase()} traffic.`,
+    summary: `Estimated monthly cost for a ${sanitize(environment).toLowerCase()} environment in ${sanitize(region).split(' ')[0]} using ${sanitize(pricingModel).split('(')[0].trim()} pricing. Covers ${breakdown.length} service(s) with ${sanitize(traffic).toLowerCase()} traffic.`,
     optimizations: [
       'Consider Reserved Instances for steady-state workloads to save up to 60%',
       'Use S3 Intelligent-Tiering for automatic storage cost optimization',
@@ -208,17 +288,24 @@ function generateDemoEstimate(services, usecase, region, traffic, pricingModel, 
   };
 }
 
-// ── API Route: Cost Estimate (PROTECTED) ──
-app.post('/api/estimate', authenticateToken, (req, res) => {
+// ── API Route: Cost Estimate (PROTECTED + RATE LIMITED) ──
+app.post('/api/estimate', authenticateToken, estimateLimiter, (req, res) => {
   const { services, usecase, region, traffic, pricingModel, environment, additional } = req.body;
   const userId = req.user.id;
 
-  // 1. Validate input
-  if (!services && !usecase) {
+  // SECURITY: Sanitize all user inputs
+  const cleanServices = sanitize(services || '');
+  const cleanUsecase = sanitize(usecase || '');
+  const cleanRegion = sanitize(region || 'us-east-1');
+  const cleanTraffic = sanitize(traffic || 'Medium');
+  const cleanPricing = sanitize(pricingModel || 'On-Demand');
+  const cleanEnv = sanitize(environment || 'Production');
+  const cleanAdditional = sanitize(additional || '');
+
+  if (!cleanServices && !cleanUsecase) {
     return res.status(400).json({ error: 'Please provide services or a use case description.' });
   }
 
-  // 2. Check credits in database
   db.get('SELECT free_credits FROM users WHERE id = ?', [userId], async (err, row) => {
     if (err) return res.status(500).json({ error: 'Database error.' });
     if (!row) return res.status(404).json({ error: 'User not found.' });
@@ -230,32 +317,29 @@ app.post('/api/estimate', authenticateToken, (req, res) => {
       });
     }
 
-    // 3. User has credits, let's process the estimate
     const apiKey = process.env.ANTHROPIC_API_KEY;
     let estimateResult;
 
     try {
       if (!apiKey || apiKey === 'your_key_here') {
-        // DEMO MODE
         console.log(`⚡ [User ${userId}] requested estimate (Demo Mode)`);
         await new Promise(resolve => setTimeout(resolve, 1500));
         estimateResult = generateDemoEstimate(
-          services || '', usecase || '', region || 'us-east-1',
-          traffic || 'Medium', pricingModel || 'On-Demand', environment || 'Production'
+          cleanServices, cleanUsecase, cleanRegion,
+          cleanTraffic, cleanPricing, cleanEnv
         );
       } else {
-        // REAL ANTHROPIC APU
         console.log(`⚡ [User ${userId}] requested estimate (Live AI)`);
 
         const prompt = `You are an expert AWS Solutions Architect and cost analyst.
 Estimate the monthly AWS infrastructure cost for the following setup:
-**AWS Services:** ${services || 'Not specified'}
-**Use Case Description:** ${usecase || 'Not specified'}
-**AWS Region:** ${region}
-**Expected Traffic:** ${traffic}
-**Pricing Model:** ${pricingModel}
-**Environment:** ${environment}
-**Additional Requirements:** ${additional || 'None'}
+**AWS Services:** ${cleanServices || 'Not specified'}
+**Use Case Description:** ${cleanUsecase || 'Not specified'}
+**AWS Region:** ${cleanRegion}
+**Expected Traffic:** ${cleanTraffic}
+**Pricing Model:** ${cleanPricing}
+**Environment:** ${cleanEnv}
+**Additional Requirements:** ${cleanAdditional || 'None'}
 
 Provide a detailed response in this EXACT JSON format only, no markdown:
 {
@@ -286,7 +370,6 @@ Return ONLY the JSON. No extra text.`;
         estimateResult = JSON.parse(clean);
       }
 
-      // 4. Successfully got estimate -> Deduct 1 credit
       db.run('UPDATE users SET free_credits = free_credits - 1 WHERE id = ?', [userId], function (updateErr) {
         if (updateErr) {
           console.error("Failed to deduct credit, but returning estimate:", updateErr);
@@ -298,7 +381,8 @@ Return ONLY the JSON. No extra text.`;
 
     } catch (err) {
       console.error('Estimate error:', err);
-      res.status(500).json({ error: 'Failed to generate estimate. ' + err.message });
+      // SECURITY: Don't leak internal error details to the client
+      res.status(500).json({ error: 'Failed to generate estimate. Please try again.' });
     }
   });
 });
@@ -318,6 +402,7 @@ app.listen(PORT, () => {
   console.log(`  ║   🌐 http://localhost:${PORT}                    ║`);
   console.log(`  ║   🤖 AI Mode: ${hasKey ? 'LIVE (Anthropic API)' : 'DEMO (sample data)'}       ║`);
   console.log('  ║   🔒 Auth: SQLite + JWT Enabled               ║');
+  console.log('  ║   🛡️  Security: Helmet + Rate Limit + Sanitize ║');
   console.log('  ║                                               ║');
   console.log('  ╚═══════════════════════════════════════════════╝');
   console.log('');
