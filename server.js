@@ -324,11 +324,18 @@ app.post('/api/estimate', authenticateToken, estimateLimiter, (req, res) => {
     try {
       if (!apiKey || apiKey === 'your_key_here') {
         console.log(`⚡ [User ${userId}] requested estimate (Demo Mode)`);
+        console.log(`   Services: ${cleanServices}`);
+        console.log(`   Region: ${cleanRegion}, Traffic: ${cleanTraffic}`);
         await new Promise(resolve => setTimeout(resolve, 1500));
-        estimateResult = generateDemoEstimate(
-          cleanServices, cleanUsecase, cleanRegion,
-          cleanTraffic, cleanPricing, cleanEnv
-        );
+        try {
+          estimateResult = generateDemoEstimate(
+            cleanServices, cleanUsecase, cleanRegion,
+            cleanTraffic, cleanPricing, cleanEnv
+          );
+        } catch (demoErr) {
+          console.error('Demo estimate generation error:', demoErr.message, demoErr.stack);
+          throw demoErr;
+        }
       } else {
         console.log(`⚡ [User ${userId}] requested estimate (Live AI)`);
 
@@ -350,25 +357,35 @@ Provide a detailed response in this EXACT JSON format only, no markdown:
 }
 Return ONLY the JSON. No extra text.`;
 
-        const response = await fetch('https://api.anthropic.com/v1/messages', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-api-key': apiKey,
-            'anthropic-version': '2023-06-01',
-          },
-          body: JSON.stringify({
-            model: 'claude-sonnet-4-20250514',
-            max_tokens: 1500,
-            messages: [{ role: 'user', content: prompt }],
-          }),
-        });
+        try {
+          const response = await fetch('https://api.anthropic.com/v1/messages', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-api-key': apiKey,
+              'anthropic-version': '2023-06-01',
+            },
+            body: JSON.stringify({
+              model: 'claude-sonnet-4-20250514',
+              max_tokens: 1500,
+              messages: [{ role: 'user', content: prompt }],
+            }),
+          });
 
-        if (!response.ok) throw new Error(`Anthropic API error: ${response.status}`);
-        const data = await response.json();
-        const rawText = data.content[0].text;
-        const clean = rawText.replace(/```json|```/g, '').trim();
-        estimateResult = JSON.parse(clean);
+          if (!response.ok) throw new Error(`Anthropic API error: ${response.status}`);
+          const data = await response.json();
+          const rawText = data.content[0].text;
+          const cleanText = rawText.replace(/```json|```/g, '').trim();
+          estimateResult = JSON.parse(cleanText);
+        } catch (aiErr) {
+          // FALLBACK: If AI call fails, use demo mode instead of crashing
+          console.warn(`⚠️  AI call failed (${aiErr.message}), falling back to demo mode`);
+          estimateResult = generateDemoEstimate(
+            cleanServices, cleanUsecase, cleanRegion,
+            cleanTraffic, cleanPricing, cleanEnv
+          );
+          estimateResult.demo_mode = true;
+        }
       }
 
       db.run('UPDATE users SET free_credits = free_credits - 1 WHERE id = ?', [userId], function (updateErr) {
@@ -381,7 +398,7 @@ Return ONLY the JSON. No extra text.`;
       });
 
     } catch (err) {
-      console.error('Estimate error:', err);
+      console.error('Estimate error:', err.message, err.stack);
       // SECURITY: Don't leak internal error details to the client
       res.status(500).json({ error: 'Failed to generate estimate. Please try again.' });
     }
