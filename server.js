@@ -59,11 +59,11 @@ app.post('/api/auth/register', async (req, res) => {
 
   try {
     const hash = await bcrypt.hash(password, 10);
-    
+
     db.run(
       'INSERT INTO users (email, password_hash) VALUES (?, ?)',
       [email, hash],
-      function(err) {
+      function (err) {
         if (err) {
           if (err.message.includes('UNIQUE constraint failed')) {
             return res.status(400).json({ error: 'Email already exists. Please log in.' });
@@ -74,7 +74,7 @@ app.post('/api/auth/register', async (req, res) => {
 
         const userId = this.lastID;
         const token = jwt.sign({ id: userId, email }, JWT_SECRET, { expiresIn: '7d' });
-        
+
         res.status(201).json({
           message: 'Account created successfully!',
           token,
@@ -111,7 +111,7 @@ app.post('/api/auth/login', (req, res) => {
     }
 
     const token = jwt.sign({ id: user.id, email: user.email }, JWT_SECRET, { expiresIn: '7d' });
-    
+
     res.json({
       message: 'Logged in successfully!',
       token,
@@ -135,21 +135,31 @@ function generateDemoEstimate(services, usecase, region, traffic, pricingModel, 
   const serviceList = services.split(',').map(s => s.trim()).filter(Boolean);
 
   const servicePricing = {
-    'EC2':          { base: 62.00,    notes: 't3.medium On-Demand Linux' },
-    'RDS':          { base: 28.50,    notes: 'db.t3.small PostgreSQL Single-AZ' },
-    'S3':           { base: 2.30,     notes: 'Standard storage ~50GB + requests' },
-    'Lambda':       { base: 4.20,     notes: '1M invocations/mo, 256MB, 200ms avg' },
-    'CloudFront':   { base: 8.50,     notes: '100GB transfer, 1M requests' },
-    'EKS':          { base: 73.00,    notes: 'Cluster fee + 2 t3.medium nodes' },
-    'ECS':          { base: 45.00,    notes: '2 Fargate tasks, 0.5vCPU/1GB' },
-    'ElastiCache':  { base: 24.80,    notes: 'cache.t3.micro Redis single-node' },
-    'SQS':          { base: 1.20,     notes: '~500K requests/mo Standard queue' },
-    'SNS':          { base: 0.80,     notes: '~100K notifications/mo' },
-    'API Gateway':  { base: 10.50,    notes: 'REST API, 1M requests/mo' },
-    'DynamoDB':     { base: 12.75,    notes: '25 WCU/RCU On-Demand' },
-    'Elasticsearch':{ base: 38.40,    notes: 't3.small.search single-node' },
-    'NAT Gateway':  { base: 32.40,    notes: 'Single AZ + 10GB data processing' },
-    'Route 53':     { base: 1.50,     notes: '1 hosted zone + 1M queries' },
+    'EC2': { base: 62.00, notes: 't3.medium On-Demand Linux' },
+    'RDS': { base: 28.50, notes: 'db.t3.small PostgreSQL Single-AZ' },
+    'S3': { base: 2.30, notes: 'Standard storage ~50GB + requests' },
+    'Lambda': { base: 4.20, notes: '1M invocations/mo, 256MB, 200ms avg' },
+    'CloudFront': { base: 8.50, notes: '100GB transfer, 1M requests' },
+    'EKS': { base: 73.00, notes: 'Cluster fee + 2 t3.medium nodes' },
+    'ECS': { base: 45.00, notes: '2 Fargate tasks, 0.5vCPU/1GB' },
+    'ElastiCache': { base: 24.80, notes: 'cache.t3.micro Redis single-node' },
+    'SQS': { base: 1.20, notes: '~500K requests/mo Standard queue' },
+    'SNS': { base: 0.80, notes: '~100K notifications/mo' },
+    'API Gateway': { base: 10.50, notes: 'REST API, 1M requests/mo' },
+    'DynamoDB': { base: 12.75, notes: '25 WCU/RCU On-Demand' },
+    'Elasticsearch': { base: 38.40, notes: 't3.small.search single-node' },
+    'NAT Gateway': { base: 32.40, notes: 'Single AZ + 10GB data processing' },
+    'Route 53': { base: 1.50, notes: '1 hosted zone + 1M queries' },
+    'ELB': { base: 22.50, notes: 'Application Load Balancer + 10 LCU-hours' },
+    'EBS': { base: 8.00, notes: '100GB gp3 volume' },
+    'CloudWatch': { base: 3.50, notes: '10 custom metrics + 5 alarms + 1GB logs' },
+    'Cognito': { base: 5.25, notes: '10K MAU, basic auth features' },
+    'Step Functions': { base: 2.50, notes: '10K state transitions/mo' },
+    'Redshift': { base: 180.00, notes: 'dc2.large single-node cluster' },
+    'Kinesis': { base: 14.40, notes: '1 shard, 24hr retention' },
+    'SES': { base: 1.00, notes: '10K emails/mo' },
+    'ECR': { base: 1.50, notes: '~15GB stored images' },
+    'Secrets Manager': { base: 2.00, notes: '5 secrets, 10K API calls/mo' },
   };
 
   // Traffic multipliers
@@ -214,9 +224,9 @@ app.post('/api/estimate', authenticateToken, (req, res) => {
     if (!row) return res.status(404).json({ error: 'User not found.' });
 
     if (row.free_credits <= 0) {
-      return res.status(403).json({ 
+      return res.status(403).json({
         error: 'You have NO credits remaining. Please buy more credits.',
-        out_of_credits: true 
+        out_of_credits: true
       });
     }
 
@@ -236,7 +246,7 @@ app.post('/api/estimate', authenticateToken, (req, res) => {
       } else {
         // REAL ANTHROPIC APU
         console.log(`⚡ [User ${userId}] requested estimate (Live AI)`);
-        
+
         const prompt = `You are an expert AWS Solutions Architect and cost analyst.
 Estimate the monthly AWS infrastructure cost for the following setup:
 **AWS Services:** ${services || 'Not specified'}
@@ -277,7 +287,7 @@ Return ONLY the JSON. No extra text.`;
       }
 
       // 4. Successfully got estimate -> Deduct 1 credit
-      db.run('UPDATE users SET free_credits = free_credits - 1 WHERE id = ?', [userId], function(updateErr) {
+      db.run('UPDATE users SET free_credits = free_credits - 1 WHERE id = ?', [userId], function (updateErr) {
         if (updateErr) {
           console.error("Failed to deduct credit, but returning estimate:", updateErr);
         } else {
