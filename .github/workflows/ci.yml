@@ -1,0 +1,60 @@
+name: CI — CloudCost.io
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Start server and health check
+        run: |
+          node server.js &
+          sleep 3
+          curl -f http://localhost:3000 || exit 1
+          echo "✅ Homepage loads successfully"
+
+      - name: Test API — Register
+        run: |
+          RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" -X POST http://localhost:3000/api/auth/register \
+            -H "Content-Type: application/json" \
+            -d '{"email":"ci-test@cloudcost.io","password":"testpass123"}')
+          [ "$RESPONSE" = "201" ] && echo "✅ Registration works" || (echo "❌ Registration failed: $RESPONSE" && exit 1)
+
+      - name: Test API — Login
+        run: |
+          RESPONSE=$(curl -s -X POST http://localhost:3000/api/auth/login \
+            -H "Content-Type: application/json" \
+            -d '{"email":"ci-test@cloudcost.io","password":"testpass123"}')
+          echo "$RESPONSE" | grep -q "token" && echo "✅ Login works" || (echo "❌ Login failed" && exit 1)
+
+      - name: Test API — Estimate (with auth)
+        run: |
+          TOKEN=$(curl -s -X POST http://localhost:3000/api/auth/login \
+            -H "Content-Type: application/json" \
+            -d '{"email":"ci-test@cloudcost.io","password":"testpass123"}' | grep -o '"token":"[^"]*"' | cut -d'"' -f4)
+          RESPONSE=$(curl -s -X POST http://localhost:3000/api/estimate \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer $TOKEN" \
+            -d '{"services":"EC2, S3","usecase":"CI test","region":"us-east-1","traffic":"Low","pricingModel":"On-Demand","environment":"Development"}')
+          echo "$RESPONSE" | grep -q "monthly_usd" && echo "✅ Estimate works" || (echo "❌ Estimate failed" && exit 1)
+          echo "$RESPONSE" | grep -q '"remaining_credits":2' && echo "✅ Credit deduction works" || echo "⚠️  Credit count unexpected"
+
+      - name: Build Docker image
+        run: docker build -t cloudcost-io:ci .
